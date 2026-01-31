@@ -261,6 +261,28 @@ public final class ModelValidatorRenderer {
                         Throwable cause = ite.getCause() == null ? ite : ite.getCause();
                         throw new IOException("DMN diagram rendering failed: " + cause.getMessage(), cause);
                     }
+
+                    // If the Flowable DMN image generator returned a visually-empty/blank image
+                    // (common when the DMN XML contains no DI/DRD shapes), create a compact
+                    // informative placeholder that shows decision name and counts (inputs/outputs/rules).
+                    try {
+                        BufferedImage produced = null;
+                        if (imgBytes != null && imgBytes.length > 0) {
+                            produced = ImageIO.read(new ByteArrayInputStream(imgBytes));
+                        }
+                        if (produced == null || isMostlyBlank(produced)) {
+                            // create a readable placeholder from the parsed DMN model
+                            int w = (produced != null) ? produced.getWidth() : 1000;
+                            int h = (produced != null) ? produced.getHeight() : 600;
+                            imgBytes = createDmnPlaceholder(dmnModel, w, h);
+                        }
+                        // safety net: if bytes are unexpectedly tiny, replace with a deterministic placeholder
+                        if (imgBytes == null || imgBytes.length < 1024) {
+                            imgBytes = createSimplePlaceholderPng("DMN summary", 1000, 600);
+                        }
+                    } catch (Throwable _t) {
+                        // non-fatal: fall back to whatever the generator returned (or let downstream handle empty)
+                    }
                     break;
                 }
                 default:
@@ -525,5 +547,152 @@ public final class ModelValidatorRenderer {
         if (is != null) {
             out.add(new StreamSource(is));
         }
+    }
+
+    // Return true when the image appears visually empty (mostly white/blank).
+    private static boolean isMostlyBlank(BufferedImage img) {
+        if (img == null) return true;
+        final int w = img.getWidth();
+        final int h = img.getHeight();
+        long total = (long) w * h;
+        long blank = 0;
+        // sample pixels if image is large
+        int stepX = Math.max(1, w / 200);
+        int stepY = Math.max(1, h / 120);
+        for (int y = 0; y < h; y += stepY) {
+            for (int x = 0; x < w; x += stepX) {
+                int rgb = img.getRGB(x, y);
+                int r = (rgb >> 16) & 0xff;
+                int g = (rgb >> 8) & 0xff;
+                int b = (rgb) & 0xff;
+                // treat near-white as blank
+                if (r > 240 && g > 240 && b > 240) blank++;
+            }
+        }
+        double ratio = (double) blank / ((w / stepX) * (h / stepY));
+        return ratio > 0.98d;
+    }
+
+    // Create a DMN placeholder PNG summarising the parsed DMN model (decision name, input/output/rule counts)
+    private static byte[] createDmnPlaceholder(Object dmnModel, int width, int height) throws IOException {
+        String title = "DMN";
+        List<String> lines = new ArrayList<>();
+        try {
+            java.lang.reflect.Method getDecisions = dmnModel.getClass().getMethod("getDecisions");
+            @SuppressWarnings("unchecked")
+            List<Object> decisions = (List<Object>) getDecisions.invoke(dmnModel);
+            if (decisions != null && !decisions.isEmpty()) {
+                Object dec = decisions.get(0);
+                try {
+                    java.lang.reflect.Method getName = dec.getClass().getMethod("getName");
+                    Object nm = getName.invoke(dec);
+                    if (nm != null) title = nm.toString();
+                } catch (NoSuchMethodException ignore) {}
+
+                try {
+                    java.lang.reflect.Method getDecisionTable = dec.getClass().getMethod("getDecisionTable");
+                    Object table = getDecisionTable.invoke(dec);
+                    if (table != null) {
+                        try {
+                            java.lang.reflect.Method getInputs = table.getClass().getMethod("getInputs");
+                            java.lang.reflect.Method getOutputs = table.getClass().getMethod("getOutputs");
+                            java.lang.reflect.Method getRules = table.getClass().getMethod("getRules");
+                            @SuppressWarnings("unchecked")
+                            List<Object> inputs = (List<Object>) getInputs.invoke(table);
+                            @SuppressWarnings("unchecked")
+                            List<Object> outputs = (List<Object>) getOutputs.invoke(table);
+                            @SuppressWarnings("unchecked")
+                            List<Object> rules = (List<Object>) getRules.invoke(table);
+                            lines.add(String.format("inputs: %d", inputs == null ? 0 : inputs.size()));
+                            lines.add(String.format("outputs: %d", outputs == null ? 0 : outputs.size()));
+                            lines.add(String.format("rules: %d", rules == null ? 0 : rules.size()));
+
+                            // add first few input names for context
+                            if (inputs != null && !inputs.isEmpty()) {
+                                StringBuilder sb = new StringBuilder();
+                                sb.append("input(s): ");
+                                int shown = Math.min(3, inputs.size());
+                                for (int i = 0; i < shown; i++) {
+                                    try {
+                                        java.lang.reflect.Method inName = inputs.get(i).getClass().getMethod("getInputExpression");
+                                        Object ie = inName.invoke(inputs.get(i));
+                                        java.lang.reflect.Method textM = ie.getClass().getMethod("getText");
+                                        Object txt = textM.invoke(ie);
+                                        sb.append(txt == null ? "?" : txt.toString());
+                                    } catch (Throwable ex) {
+                                        // best-effort
+                                        sb.append("?");
+                                    }
+                                    if (i < shown - 1) sb.append(", ");
+                                }
+                                lines.add(sb.toString());
+                            }
+                        } catch (NoSuchMethodException ignored) {
+                            // best-effort; skip
+                        }
+                    }
+                } catch (NoSuchMethodException ignored) {
+                    // skip
+                }
+            }
+        } catch (NoSuchMethodException ignored) {
+            // dmnModel does not expose expected methods; fallback to generic
+        } catch (Throwable t) {
+            // swallow — placeholder should never fail the renderer
+        }
+
+        if (lines.isEmpty()) lines.add("(no decision table diagram available)");
+
+        int w = Math.max(600, width);
+        int h = Math.max(360, height);
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = img.createGraphics();
+        try {
+            g.setColor(java.awt.Color.WHITE);
+            g.fillRect(0, 0, w, h);
+            g.setColor(java.awt.Color.DARK_GRAY);
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, Math.max(18, w/32)));
+            int y = 60;
+            g.drawString(title, 40, y);
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, Math.max(12, w/80)));
+            y += 30;
+            for (String ln : lines) {
+                g.drawString(ln, 44, y);
+                y += 22;
+            }
+
+            // faint box and hint
+            g.setColor(new java.awt.Color(0,0,0,40));
+            g.drawRect(20, 30, w - 44, Math.min(h - 80, y - 20));
+            g.setColor(new java.awt.Color(120,120,120));
+            String hint = "Note: source DMN contains no DRD/DI — showing a summary instead";
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.ITALIC, Math.max(10, w/120)));
+            g.drawString(hint, 40, h - 28);
+        } finally {
+            g.dispose();
+        }
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        ImageIO.write(img, "png", baos);
+        return baos.toByteArray();
+    }
+
+    private static byte[] createSimplePlaceholderPng(String title, int w, int h) throws IOException {
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = img.createGraphics();
+        try {
+            g.setColor(java.awt.Color.WHITE);
+            g.fillRect(0,0,w,h);
+            g.setColor(java.awt.Color.BLACK);
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 28));
+            g.drawString(title, 40, 80);
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 14));
+            g.drawString("(renderer could not produce a detailed DRD diagram)", 40, 120);
+            g.drawRect(20, 40, w - 60, h - 120);
+        } finally {
+            g.dispose();
+        }
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        ImageIO.write(img, "png", baos);
+        return baos.toByteArray();
     }
 }
