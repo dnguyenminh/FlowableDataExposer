@@ -206,6 +206,7 @@ public final class ModelValidatorRenderer {
         try {
             ModelType type = detectType(xml);
             byte[] imgBytes = null;
+            byte[] tableBytes = null; // additional artifact when DMN decision table is present
             switch (type) {
                 case BPMN: {
                     byte[] xmlBytes = Files.readAllBytes(xml);
@@ -252,37 +253,77 @@ public final class ModelValidatorRenderer {
                     if (dmnModel == null) {
                         throw new IllegalStateException("DMN converter not available on classpath");
                     }
-                    Class<?> drdGenClass = Class.forName("org.flowable.dmn.image.impl.DefaultDecisionRequirementsDiagramGenerator");
-                    Object drdGen = drdGenClass.getDeclaredConstructor().newInstance();
-                    java.lang.reflect.Method m = drdGenClass.getMethod("generateDiagram", Class.forName("org.flowable.dmn.model.DmnDefinition"), String.class);
-                    try (InputStream is = (InputStream) m.invoke(drdGen, dmnModel, "png")) {
-                        imgBytes = is.readAllBytes();
-                    } catch (java.lang.reflect.InvocationTargetException ite) {
-                        Throwable cause = ite.getCause() == null ? ite : ite.getCause();
-                        throw new IOException("DMN diagram rendering failed: " + cause.getMessage(), cause);
+
+                    // If the source DMN contains an inline <decisionTable> prefer our
+                    // XML-based decision-table renderer — Flowable's DRD generator
+                    // frequently returns an effectively-empty diagram when no DI is present.
+                    String xmlLower = new String(xmlBytes, java.nio.charset.StandardCharsets.UTF_8).toLowerCase();
+                    if (xmlLower.contains("<decisiontable")) {
+                        tableBytes = createDmnDecisionTableImageFromXml(xmlBytes, 1000, 600);
+                        if (tableBytes != null && tableBytes.length > 1024) {
+                            imgBytes = tableBytes;
+                            // keep tableBytes so we also write a dedicated artifact later
+                        } else {
+                            // otherwise fall through to the DRD generator as a safety net
+                        }
                     }
 
-                    // If the Flowable DMN image generator returned a visually-empty/blank image
-                    // (common when the DMN XML contains no DI/DRD shapes), create a compact
-                    // informative placeholder that shows decision name and counts (inputs/outputs/rules).
-                    try {
-                        BufferedImage produced = null;
-                        if (imgBytes != null && imgBytes.length > 0) {
-                            produced = ImageIO.read(new ByteArrayInputStream(imgBytes));
+                    if (imgBytes == null) {
+                        Class<?> drdGenClass = Class.forName("org.flowable.dmn.image.impl.DefaultDecisionRequirementsDiagramGenerator");
+                        Object drdGen = drdGenClass.getDeclaredConstructor().newInstance();
+                        java.lang.reflect.Method m = drdGenClass.getMethod("generateDiagram", Class.forName("org.flowable.dmn.model.DmnDefinition"), String.class);
+                        try (InputStream is = (InputStream) m.invoke(drdGen, dmnModel, "png")) {
+                            imgBytes = is.readAllBytes();
+                        } catch (java.lang.reflect.InvocationTargetException ite) {
+                            Throwable cause = ite.getCause() == null ? ite : ite.getCause();
+                            throw new IOException("DMN diagram rendering failed: " + cause.getMessage(), cause);
                         }
-                        if (produced == null || isMostlyBlank(produced)) {
-                            // create a readable placeholder from the parsed DMN model
-                            int w = (produced != null) ? produced.getWidth() : 1000;
-                            int h = (produced != null) ? produced.getHeight() : 600;
-                            imgBytes = createDmnPlaceholder(dmnModel, w, h);
+
+                        // If the Flowable DMN image generator returned a visually-empty/blank image
+                        // (common when the DMN XML contains no DI/DRD shapes), create a compact
+                        // informative placeholder that shows decision name and counts (inputs/outputs/rules).
+                        try {
+                            BufferedImage produced = null;
+                            if (imgBytes != null && imgBytes.length > 0) {
+                                produced = ImageIO.read(new ByteArrayInputStream(imgBytes));
+                            }
+                            if (produced == null || isMostlyBlank(produced)) {
+                                // create a readable placeholder from the parsed DMN model
+                                int w = (produced != null) ? produced.getWidth() : 1000;
+                                int h = (produced != null) ? produced.getHeight() : 600;
+                                // Prefer a rendered decision-table layout when a DecisionTable is present
+                                byte[] tableImg = createDmnDecisionTableImage(dmnModel, w, h);
+                                // If reflective extraction failed, fall back to XML-based extraction
+                                if ((tableImg == null || tableImg.length < 1024) && xmlBytes != null) {
+                                    byte[] xmlBased = createDmnDecisionTableImageFromXml(xmlBytes, w, h);
+                                    if (xmlBased != null && xmlBased.length > 1024) tableImg = xmlBased;
+                                }
+                                if (tableImg != null && tableImg.length > 1024) {
+                                    imgBytes = tableImg;
+                                    tableBytes = tableImg; // preserve for separate artifact
+                                } else {
+                                    imgBytes = createDmnPlaceholder(dmnModel, w, h);
+                                }
+                            }
+                            // safety net: if bytes are unexpectedly tiny, replace with a deterministic placeholder
+                            if (imgBytes == null || imgBytes.length < 1024) {
+                                imgBytes = createSimplePlaceholderPng("DMN summary", 1000, 600);
+                            }
+                        } catch (Throwable _t) {
+                            // non-fatal: fall back to whatever the generator returned (or let downstream handle empty)
                         }
-                        // safety net: if bytes are unexpectedly tiny, replace with a deterministic placeholder
-                        if (imgBytes == null || imgBytes.length < 1024) {
-                            imgBytes = createSimplePlaceholderPng("DMN summary", 1000, 600);
-                        }
-                    } catch (Throwable _t) {
-                        // non-fatal: fall back to whatever the generator returned (or let downstream handle empty)
                     }
+
+                    // If we parsed a decision table but did not produce a specialized table image above,
+                    // still attempt to generate a tableBytes artifact so callers can inspect the tabular data.
+                    if (tableBytes == null && xmlBytes != null && xmlLower.contains("<decisiontable")) {
+                        try {
+                            tableBytes = createDmnDecisionTableImageFromXml(xmlBytes, 1000, 600);
+                        } catch (Throwable ignore) {
+                            tableBytes = null;
+                        }
+                    }
+
                     break;
                 }
                 default:
@@ -300,9 +341,21 @@ public final class ModelValidatorRenderer {
 
              Files.createDirectories(outputFile.getParent());
              try (FileOutputStream fos = new FileOutputStream(outputFile.toFile())) {
-                 fos.write(imgBytes);
-             }
-             return outputFile;
+                fos.write(imgBytes);
+            }
+
+            // Write additional DMN decision-table artifact when available (keeps existing PNG unchanged).
+            if (tableBytes != null && tableBytes.length > 1024) {
+                String baseName = outputFile.getFileName().toString();
+                String tableName = baseName.replaceAll("(?i)\\.png$", "") + ".table.png";
+                Path tableOut = outputFile.getParent().resolve(tableName);
+                try (FileOutputStream tf = new FileOutputStream(tableOut.toFile())) {
+                    tf.write(enhanceThumbnail(tableBytes));
+                } catch (Throwable ignored) {
+                    // non-fatal — main artifact already written
+                }
+            }
+            return outputFile;
         } catch (IOException ioe) {
             throw ioe;
         } catch (Exception e) {
@@ -676,6 +729,428 @@ public final class ModelValidatorRenderer {
         return baos.toByteArray();
     }
 
+    // Attempt to render a DecisionTable as a readable tabular PNG when the DMN DI/DRD
+    // is not present or Flowable's image generator returns an empty image.
+    // Returns null when no decision table could be rendered.
+    private static byte[] createDmnDecisionTableImage(Object dmnModel, int width, int height) throws IOException {
+        try {
+            java.lang.reflect.Method getDecisions = dmnModel.getClass().getMethod("getDecisions");
+            @SuppressWarnings("unchecked")
+            List<Object> decisions = (List<Object>) getDecisions.invoke(dmnModel);
+            if (decisions == null || decisions.isEmpty()) return null;
+            Object dec = decisions.get(0);
+            java.lang.reflect.Method getDecisionTable = dec.getClass().getMethod("getDecisionTable");
+            Object table = getDecisionTable.invoke(dec);
+            if (table == null) return null;
+
+            // extract inputs, outputs, rules
+            java.lang.reflect.Method getInputs = table.getClass().getMethod("getInputs");
+            java.lang.reflect.Method getOutputs = table.getClass().getMethod("getOutputs");
+            java.lang.reflect.Method getRules = table.getClass().getMethod("getRules");
+            @SuppressWarnings("unchecked") List<Object> inputs = (List<Object>) getInputs.invoke(table);
+            @SuppressWarnings("unchecked") List<Object> outputs = (List<Object>) getOutputs.invoke(table);
+            @SuppressWarnings("unchecked") List<Object> rules = (List<Object>) getRules.invoke(table);
+            if ((inputs == null || inputs.isEmpty()) && (outputs == null || outputs.isEmpty())) return null;
+
+            // build string matrix for header + rows
+            int inCount = inputs == null ? 0 : inputs.size();
+            int outCount = outputs == null ? 0 : outputs.size();
+            int colCount = inCount + outCount;
+            int rowCount = rules == null ? 0 : rules.size();
+            if (colCount == 0 || rowCount == 0) return null;
+
+            // limit rows/cols to keep image readable
+            final int MAX_COLS = 8;
+            final int MAX_ROWS = 20;
+            int renderCols = Math.min(colCount, MAX_COLS);
+            int renderRows = Math.min(rowCount, MAX_ROWS);
+
+            // prepare headers
+            String[] headers = new String[renderCols];
+            for (int i = 0; i < renderCols; i++) {
+                if (i < inCount) {
+                    try {
+                        java.lang.reflect.Method ie = inputs.get(i).getClass().getMethod("getInputExpression");
+                        Object expr = ie.invoke(inputs.get(i));
+                        java.lang.reflect.Method txtM = expr.getClass().getMethod("getText");
+                        Object txt = txtM.invoke(expr);
+                        headers[i] = txt == null ? "in" + (i+1) : txt.toString();
+                    } catch (Throwable t) { headers[i] = "in" + (i+1); }
+                } else {
+                    int oi = i - inCount;
+                    if (oi < outputs.size()) {
+                        try {
+                            java.lang.reflect.Method nameM = outputs.get(oi).getClass().getMethod("getName");
+                            Object nm = nameM.invoke(outputs.get(oi));
+                            headers[i] = nm == null ? "out" + (oi+1) : nm.toString();
+                        } catch (Throwable t) { headers[i] = "out" + (oi+1); }
+                    } else {
+                        headers[i] = "col" + (i+1);
+                    }
+                }
+            }
+
+            // gather row values
+            String[][] cells = new String[renderRows][renderCols];
+            for (int r = 0; r < renderRows; r++) {
+                Object rule = rules.get(r);
+                // input entries
+                try {
+                    java.lang.reflect.Method getInputEntries = rule.getClass().getMethod("getInputEntries");
+                    java.lang.reflect.Method getOutputEntries = rule.getClass().getMethod("getOutputEntries");
+                    @SuppressWarnings("unchecked") List<Object> inEls = (List<Object>) getInputEntries.invoke(rule);
+                    @SuppressWarnings("unchecked") List<Object> outEls = (List<Object>) getOutputEntries.invoke(rule);
+                    for (int c = 0; c < renderCols; c++) {
+                        if (c < inCount) {
+                            int idx = c;
+                            if (inEls != null && idx < inEls.size() && inEls.get(idx) != null) {
+                                try {
+                                    java.lang.reflect.Method txtM = inEls.get(idx).getClass().getMethod("getText");
+                                    Object txt = txtM.invoke(inEls.get(idx));
+                                    cells[r][c] = txt == null ? "-" : txt.toString();
+                                } catch (Throwable t) { cells[r][c] = "-"; }
+                            } else {
+                                cells[r][c] = "-";
+                            }
+                        } else {
+                            int oi = c - inCount;
+                            if (outEls != null && oi < outEls.size() && outEls.get(oi) != null) {
+                                try {
+                                    java.lang.reflect.Method txtM = outEls.get(oi).getClass().getMethod("getText");
+                                    Object txt = txtM.invoke(outEls.get(oi));
+                                    cells[r][c] = txt == null ? "-" : txt.toString();
+                                } catch (Throwable t) { cells[r][c] = "-"; }
+                            } else {
+                                cells[r][c] = "-";
+                            }
+                        }
+                    }
+                } catch (NoSuchMethodException nsme) {
+                    // can't extract entries — fall back
+                    for (int c = 0; c < renderCols; c++) cells[r][c] = "?";
+                }
+            }
+
+            // layout: compute column widths using font metrics
+            int w = Math.max(600, width);
+            int h = Math.max(360, height);
+            BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g = img.createGraphics();
+            try {
+                g.setColor(java.awt.Color.WHITE);
+                g.fillRect(0,0,w,h);
+                g.setColor(java.awt.Color.DARK_GRAY);
+                int padding = 12;
+                int tableX = 24;
+                int tableY = 48;
+                int availW = w - tableX - 24;
+
+                java.awt.Font headerFont = new java.awt.Font("SansSerif", java.awt.Font.BOLD, 14);
+                java.awt.Font cellFont = new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 13);
+                g.setFont(cellFont);
+                java.awt.FontMetrics fmCell = g.getFontMetrics(cellFont);
+                java.awt.FontMetrics fmHeader = g.getFontMetrics(headerFont);
+
+                int[] colW = new int[renderCols];
+                int minCol = 60;
+                for (int c = 0; c < renderCols; c++) {
+                    int mw = fmHeader.stringWidth(headers[c]) + padding * 2;
+                    for (int r = 0; r < renderRows; r++) {
+                        int sw = fmCell.stringWidth(truncate(cells[r][c], 60));
+                        if (sw + padding * 2 > mw) mw = sw + padding * 2;
+                    }
+                    colW[c] = Math.max(minCol, mw);
+                }
+                // if total too wide, scale columns proportionally
+                int totalW = 0; for (int x : colW) totalW += x;
+                if (totalW > availW) {
+                    double scale = (double) availW / (double) totalW;
+                    for (int c = 0; c < colW.length; c++) colW[c] = Math.max(40, (int)(colW[c] * scale));
+                    totalW = 0; for (int x : colW) totalW += x;
+                }
+
+                int rowH = Math.max(20, fmCell.getHeight() + 8);
+                int headerH = Math.max(24, fmHeader.getHeight() + 8);
+
+                // draw title (use header context when decision name is unavailable)
+                g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 18));
+                String title = (headers != null && headers.length > 0 && headers[0] != null && !headers[0].isBlank())
+                    ? headers[0] + " — decision table" : "Decision Table";
+                 g.setColor(java.awt.Color.BLACK);
+                 g.drawString(title, tableX, 30);
+
+                // draw header background
+                int cx = tableX;
+                int cy = tableY;
+                g.setColor(new java.awt.Color(240,240,250));
+                g.fillRect(cx, cy, totalW, headerH);
+                g.setColor(java.awt.Color.DARK_GRAY);
+                g.setFont(headerFont);
+                for (int c = 0; c < renderCols; c++) {
+                    int cw = colW[c];
+                    int tx = cx + 6;
+                    int ty = cy + headerH - fmHeader.getDescent() - 6;
+                    g.drawString(elide(headers[c], 24), tx, ty);
+                    cx += cw;
+                }
+
+                // draw rows
+                g.setFont(cellFont);
+                cy += headerH;
+                for (int r = 0; r < renderRows; r++) {
+                    cx = tableX;
+                    // alternate row background to improve readability (zebra striping)
+                    if ((r & 1) == 0) {
+                        g.setColor(new java.awt.Color(255,255,255));
+                    } else {
+                        // subtle tint that remains printer-friendly and accessible
+                        g.setColor(new java.awt.Color(250,250,255));
+                    }
+                    g.fillRect(cx, cy, totalW, fmCell.getHeight() + 8);
+                    // restore text color before drawing cell content
+                    g.setColor(java.awt.Color.DARK_GRAY);
+                    for (int c = 0; c < renderCols; c++) {
+                        int tx = cx + 6;
+                        int ty = cy + fmCell.getAscent();
+                        g.drawString(elide(cells[r][c], 40), tx, ty);
+                        cx += colW[c];
+                    }
+                    cy += fmCell.getHeight() + 8;
+                }
+
+                // draw grid lines (vertical + horizontal) to emphasise cell boundaries
+                g.setColor(new java.awt.Color(200,200,220));
+                int gx = tableX;
+                int gy = tableY;
+                for (int c = 0; c <= renderCols; c++) {
+                    g.drawLine(gx, gy, gx, gy + (fmHeader.getHeight() + 8) + (fmCell.getHeight() + 8) * renderRows);
+                    if (c < renderCols) gx += colW[c];
+                }
+                for (int r = 0; r <= renderRows; r++) {
+                    int yoff = tableY + (r == 0 ? 0 : (fmHeader.getHeight() + 8)) + r * (fmCell.getHeight() + 8);
+                    g.drawLine(tableX, yoff, tableX + totalW, yoff);
+                }
+
+                // footer hint
+                g.setColor(new java.awt.Color(100,100,120));
+                g.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 11));
+                g.drawString("Rendered from DMN decision table (summary)", tableX, Math.min(h - 12, cy + 20));
+            } finally {
+                g.dispose();
+            }
+
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            ImageIO.write(img, "png", baos);
+            return baos.toByteArray();
+        } catch (NoSuchMethodException nsme) {
+            return null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    // XML-based extractor: parse DMN XML and render a decision-table PNG. Best-effort and non-throwing.
+    private static byte[] createDmnDecisionTableImageFromXml(byte[] xmlBytes, int width, int height) throws IOException {
+        try {
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            dbf.setNamespaceAware(true);
+            DocumentBuilder db = dbf.newDocumentBuilder();
+            Document doc = db.parse(new ByteArrayInputStream(xmlBytes));
+
+            // find the first decisionTable element
+            org.w3c.dom.NodeList tables = doc.getElementsByTagNameNS("http://www.omg.org/spec/DMN/20151101/dmn.xsd", "decisionTable");
+            if (tables.getLength() == 0) {
+                // try without namespace (some modelers omit it)
+                tables = doc.getElementsByTagName("decisionTable");
+                if (tables.getLength() == 0) return null;
+            }
+            org.w3c.dom.Element table = (org.w3c.dom.Element) tables.item(0);
+
+            // inputs
+            java.util.List<String> inputs = new ArrayList<>();
+            org.w3c.dom.NodeList inputEls = table.getElementsByTagName("input");
+            for (int i = 0; i < inputEls.getLength(); i++) {
+                org.w3c.dom.Element in = (org.w3c.dom.Element) inputEls.item(i);
+                String label = in.getAttribute("label");
+                if (label == null || label.isBlank()) {
+                    org.w3c.dom.NodeList exprs = in.getElementsByTagName("inputExpression");
+                    if (exprs.getLength() > 0) {
+                        org.w3c.dom.Element ie = (org.w3c.dom.Element) exprs.item(0);
+                        org.w3c.dom.NodeList texts = ie.getElementsByTagName("text");
+                        if (texts.getLength() > 0) label = texts.item(0).getTextContent();
+                    }
+                }
+                inputs.add(label == null || label.isBlank() ? ("in" + (i+1)) : label.trim());
+            }
+
+            // outputs
+            java.util.List<String> outputs = new ArrayList<>();
+            org.w3c.dom.NodeList outputEls = table.getElementsByTagName("output");
+            for (int i = 0; i < outputEls.getLength(); i++) {
+                org.w3c.dom.Element out = (org.w3c.dom.Element) outputEls.item(i);
+                String name = out.getAttribute("name");
+                outputs.add(name == null || name.isBlank() ? ("out" + (i+1)) : name.trim());
+            }
+
+            // rules
+            java.util.List<java.util.List<String>> rows = new ArrayList<>();
+            org.w3c.dom.NodeList ruleEls = table.getElementsByTagName("rule");
+            for (int r = 0; r < ruleEls.getLength(); r++) {
+                org.w3c.dom.Element rule = (org.w3c.dom.Element) ruleEls.item(r);
+                java.util.List<String> row = new ArrayList<>();
+                org.w3c.dom.NodeList inEntries = rule.getElementsByTagName("inputEntry");
+                for (int i = 0; i < inputs.size(); i++) {
+                    if (i < inEntries.getLength()) {
+                        String txt = inEntries.item(i).getTextContent();
+                        row.add(txt == null || txt.isBlank() ? "-" : txt.trim());
+                    } else {
+                        row.add("-");
+                    }
+                }
+                org.w3c.dom.NodeList outEntries = rule.getElementsByTagName("outputEntry");
+                for (int i = 0; i < outputs.size(); i++) {
+                    if (i < outEntries.getLength()) {
+                        String txt = outEntries.item(i).getTextContent();
+                        row.add(txt == null || txt.isBlank() ? "-" : txt.trim());
+                    } else {
+                        row.add("-");
+                    }
+                }
+                rows.add(row);
+            }
+
+            if (rows.isEmpty()) return null;
+
+            // reuse drawing logic: build headers and a cells matrix then paint similar to createDmnDecisionTableImage
+            int inCount = inputs.size();
+            int outCount = outputs.size();
+            int colCount = inCount + outCount;
+            int rowCount = rows.size();
+
+            final int MAX_COLS = 8;
+            final int MAX_ROWS = 20;
+            int renderCols = Math.min(colCount, MAX_COLS);
+            int renderRows = Math.min(rowCount, MAX_ROWS);
+
+            String[] headers = new String[renderCols];
+            for (int i = 0; i < renderCols; i++) {
+                if (i < inCount) headers[i] = inputs.get(i);
+                else headers[i] = outputs.get(i - inCount);
+            }
+
+            String[][] cells = new String[renderRows][renderCols];
+            for (int r = 0; r < renderRows; r++) {
+                java.util.List<String> src = rows.get(r);
+                for (int c = 0; c < renderCols; c++) {
+                    cells[r][c] = c < src.size() ? src.get(c) : "-";
+                }
+            }
+
+            // now draw (similar to createDmnDecisionTableImage)
+            int w = Math.max(600, width);
+            int h = Math.max(360, height);
+            BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g = img.createGraphics();
+            try {
+                g.setColor(java.awt.Color.WHITE);
+                g.fillRect(0,0,w,h);
+                g.setColor(java.awt.Color.DARK_GRAY);
+                int padding = 12;
+                int tableX = 24;
+                int tableY = 48;
+                int availW = w - tableX - 24;
+
+                java.awt.Font headerFont = new java.awt.Font("SansSerif", java.awt.Font.BOLD, 14);
+                java.awt.Font cellFont = new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 13);
+                g.setFont(cellFont);
+                java.awt.FontMetrics fmCell = g.getFontMetrics(cellFont);
+                java.awt.FontMetrics fmHeader = g.getFontMetrics(headerFont);
+
+                int[] colW = new int[renderCols];
+                int minCol = 60;
+                for (int c = 0; c < renderCols; c++) {
+                    int mw = fmHeader.stringWidth(headers[c]) + padding * 2;
+                    for (int r = 0; r < renderRows; r++) {
+                        int sw = fmCell.stringWidth(truncate(cells[r][c], 60));
+                        if (sw + padding * 2 > mw) mw = sw + padding * 2;
+                    }
+                    colW[c] = Math.max(minCol, mw);
+                }
+                int totalW = 0; for (int x : colW) totalW += x;
+                if (totalW > availW) {
+                    double scale = (double) availW / (double) totalW;
+                    for (int c = 0; c < colW.length; c++) colW[c] = Math.max(40, (int)(colW[c] * scale));
+                    totalW = 0; for (int x : colW) totalW += x;
+                }
+
+                // title
+                g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 18));
+                g.drawString("Decision Table", tableX, 30);
+
+                // headers + rows
+                int cx = tableX, cy = tableY;
+                g.setColor(new java.awt.Color(240,240,250));
+                g.fillRect(cx, cy, totalW, fmHeader.getHeight() + 8);
+                g.setColor(java.awt.Color.DARK_GRAY);
+                g.setFont(headerFont);
+                for (int c = 0; c < renderCols; c++) {
+                    int tx = cx + 6;
+                    int ty = cy + fmHeader.getAscent();
+                    g.drawString(elide(headers[c], 24), tx, ty);
+                    cx += colW[c];
+                }
+                cy += fmHeader.getHeight() + 8;
+                g.setFont(cellFont);
+                for (int r = 0; r < renderRows; r++) {
+                    cx = tableX;
+                    // alternate row background to improve readability (zebra striping)
+                    if ((r & 1) == 0) {
+                        g.setColor(new java.awt.Color(255,255,255));
+                    } else {
+                        // subtle tint that remains printer-friendly and accessible
+                        g.setColor(new java.awt.Color(250,250,255));
+                    }
+                    g.fillRect(cx, cy, totalW, fmCell.getHeight() + 8);
+                    // restore text color before drawing cell content
+                    g.setColor(java.awt.Color.DARK_GRAY);
+                    for (int c = 0; c < renderCols; c++) {
+                        int tx = cx + 6;
+                        int ty = cy + fmCell.getAscent();
+                        g.drawString(elide(cells[r][c], 40), tx, ty);
+                        cx += colW[c];
+                    }
+                    cy += fmCell.getHeight() + 8;
+                }
+
+                // draw grid lines (vertical + horizontal) to emphasise cell boundaries
+                g.setColor(new java.awt.Color(200,200,220));
+                int gx = tableX;
+                int gy = tableY;
+                for (int c = 0; c <= renderCols; c++) {
+                    g.drawLine(gx, gy, gx, gy + (fmHeader.getHeight() + 8) + (fmCell.getHeight() + 8) * renderRows);
+                    if (c < renderCols) gx += colW[c];
+                }
+                for (int r = 0; r <= renderRows; r++) {
+                    int yoff = tableY + (r == 0 ? 0 : (fmHeader.getHeight() + 8)) + r * (fmCell.getHeight() + 8);
+                    g.drawLine(tableX, yoff, tableX + totalW, yoff);
+                }
+
+                // footer hint
+                g.setColor(new java.awt.Color(100,100,120));
+                g.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 11));
+                g.drawString("Rendered from DMN decision table (summary)", tableX, Math.min(h - 12, cy + 20));
+            } finally {
+                g.dispose();
+            }
+
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            ImageIO.write(img, "png", baos);
+            return baos.toByteArray();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     private static byte[] createSimplePlaceholderPng(String title, int w, int h) throws IOException {
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         java.awt.Graphics2D g = img.createGraphics();
@@ -683,7 +1158,7 @@ public final class ModelValidatorRenderer {
             g.setColor(java.awt.Color.WHITE);
             g.fillRect(0,0,w,h);
             g.setColor(java.awt.Color.BLACK);
-            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 28));
+            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, Math.max(20, w/40)));
             g.drawString(title, 40, 80);
             g.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 14));
             g.drawString("(renderer could not produce a detailed DRD diagram)", 40, 120);
@@ -694,5 +1169,18 @@ public final class ModelValidatorRenderer {
         java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
         ImageIO.write(img, "png", baos);
         return baos.toByteArray();
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        if (s.length() <= max) return s;
+        return s.substring(0, max - 1) + "…";
+    }
+
+    private static String elide(String s, int max) {
+        if (s == null) return "";
+        s = s.replaceAll("\n", " ").trim();
+        if (s.length() <= max) return s;
+        return s.substring(0, max - 1) + "…";
     }
 }

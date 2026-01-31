@@ -37,6 +37,50 @@ jobs:
       - name: Run metadata/model validations (fast-fail separate)
         run: ./gradlew --no-daemon validateModels validateMetadata || true
 
+      - name: Assert model-validator produced DMN thumbnails
+        if: always()
+        run: |
+          set -euo pipefail
+          echo "Verifying DMN thumbnails in build/model-validator/"
+          mkdir -p build/model-validator
+          missing=0
+          for f in src/main/resources/decisions/*.dmn; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            out="build/model-validator/${base}.png"
+            table="build/model-validator/${base}.table.png"
+
+            if [ ! -f "$out" ] && [ ! -f "$table" ]; then
+              echo "ERROR: no thumbnail or table artifact for $base"
+              missing=1
+              continue
+            fi
+
+            ok=0
+            if [ -f "$out" ]; then
+              size=$(stat -c%s "$out" || echo 0)
+              if [ "$size" -gt 2048 ]; then ok=1; fi
+            fi
+            if [ -f "$table" ]; then
+              tsize=$(stat -c%s "$table" || echo 0)
+              if [ "$tsize" -gt 1024 ]; then ok=1; fi
+            fi
+
+            if [ "$ok" -ne 1 ]; then
+              echo "ERROR: artifacts for $base are unexpectedly small:" \
+                   "$(ls -l "$out" "$table" 2>/dev/null || true)"
+              missing=1
+            else
+              echo "OK: $base -> thumbnails present"
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Model-validator produced missing/invalid DMN thumbnails. See build/model-validator/ for artifacts." >&2
+            ls -al build/model-validator || true
+            exit 1
+          fi
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         with:

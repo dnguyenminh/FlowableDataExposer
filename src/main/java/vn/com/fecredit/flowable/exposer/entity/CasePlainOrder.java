@@ -25,6 +25,12 @@ public class CasePlainOrder {
     @Column(name = "order_priority")
     private String orderPriority;
 
+    @Column(name = "discount")
+    private Double discount;
+
+    @Column(name = "shipping_fee")
+    private Double shippingFee;
+
     @Column(name = "approval_status")
     private String approvalStatus;
 
@@ -54,6 +60,10 @@ public class CasePlainOrder {
     public void setCustomerName(String customerName) { this.customerName = customerName; }
     public String getOrderPriority() { return orderPriority; }
     public void setOrderPriority(String orderPriority) { this.orderPriority = orderPriority; }
+    public Double getDiscount() { return discount; }
+    public void setDiscount(Double discount) { this.discount = discount; }
+    public Double getShippingFee() { return shippingFee; }
+    public void setShippingFee(Double shippingFee) { this.shippingFee = shippingFee; }
     public String getApprovalStatus() { return approvalStatus; }
     public void setApprovalStatus(String approvalStatus) { this.approvalStatus = approvalStatus; }
     public String getDecisionReason() { return decisionReason; }
