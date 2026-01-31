@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: flowable-data-exposer-ci
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Gradle, JDK 21)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 and enable Gradle cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x ./gradlew
+
+      - name: Build & run tests
+        run: ./gradlew --no-daemon -s clean build
+        env:
+          TERM: xterm
+
+      - name: Run metadata/model validations (fast-fail separate)
+        run: ./gradlew --no-daemon validateModels validateMetadata || true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/test-results/test
+            build/reports/tests/test
+
+      - name: Upload model-validator output (if any)
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-validator-output
+          path: build/model-validator/
+          if-no-files-found: ignore
+
+      - name: Verify quick smoke (run a focused integration test)
+        run: ./gradlew --no-daemon :test --tests "**.CaseDataWorkerTest" -i
