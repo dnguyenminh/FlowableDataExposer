@@ -55,6 +55,7 @@ sourceSets {
     main {
         resources {
             exclude 'cases/orderCase.xml'
+            exclude 'processes/orderProcess.xml'
             // Prevent Flowable from auto-deploying the raw/Modeler CMMN; CombinedDeployment
             // will deploy a normalized, engine-valid payload at runtime instead.
             // NOTE: keep `cases/orderCase.cmmn` on the classpath so tests run against the
