@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions id="order-approval-defs" name="Order Decisions" namespace="http://example.com/dmn" xmlns="http://www.omg.org/spec/DMN/20151101/dmn.xsd">
+  <decision id="orderApproval" name="Order Approval Decision">
+    <decisionTable id="orderApprovalTable" hitPolicy="FIRST">
+      <input id="i1" label="total">
+        <inputExpression id="ie1" typeRef="number">
+          <text>total</text>
+        </inputExpression>
+      </input>
+      <input id="i2" label="customerType">
+        <inputExpression id="ie2" typeRef="string">
+          <text>customer.type</text>
+        </inputExpression>
+      </input>
+
+      <output id="o1" label="status" name="status" typeRef="string"/>
+      <output id="o2" label="reason" name="reason" typeRef="string"/>
+      <output id="o3" label="priority" name="priority" typeRef="string"/>
+
+      <rule id="r1">
+        <inputEntry id="r1i1"><text>&lt;= 1000</text></inputEntry>
+        <inputEntry id="r1i2"><text>-</text></inputEntry>
+        <outputEntry id="r1o1"><text>"APPROVE"</text></outputEntry>
+        <outputEntry id="r1o2"><text>"auto-approve-by-rule"</text></outputEntry>
+        <outputEntry id="r1o3"><text>"LOW"</text></outputEntry>
+      </rule>
+
+      <rule id="r2">
+        <inputEntry id="r2i1"><text> (total &gt; 1000) and (total &lt;= 10000) </text></inputEntry>
+        <inputEntry id="r2i2"><text>-</text></inputEntry>
+        <outputEntry id="r2o1"><text>"REVIEW"</text></outputEntry>
+        <outputEntry id="r2o2"><text>"needs-business-review"</text></outputEntry>
+        <outputEntry id="r2o3"><text>"MEDIUM"</text></outputEntry>
+      </rule>
+
+      <rule id="r3">
+        <inputEntry id="r3i1"><text> total &gt; 10000 </text></inputEntry>
+        <inputEntry id="r3i2"><text>-</text></inputEntry>
+        <outputEntry id="r3o1"><text>"HOLD"</text></outputEntry>
+        <outputEntry id="r3o2"><text>"escalate-to-senior"</text></outputEntry>
+        <outputEntry id="r3o3"><text>"HIGH"</text></outputEntry>
+      </rule>
+
+    </decisionTable>
+  </decision>
+</definitions>

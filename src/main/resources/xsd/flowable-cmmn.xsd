@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal permissive XSD for Flowable CMMN extensions (namespace: http://flowable.org/cmmn).
+  Purpose: provide IDE/CI validation for Flowable extension attributes/elements commonly
+  emitted by the Modeler (flowable:in, flowable:out, flowable:delegateExpression, etc.).
+
+  This XSD is intentionally permissive (lax) and only documents commonly-used
+  extension elements/attributes so editor schema validation does not fail.
+  It does NOT replace the official Flowable XSD hosted on flowable.org.
+-->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            targetNamespace="http://flowable.org/cmmn"
+            xmlns:flowable="http://flowable.org/cmmn"
+            elementFormDefault="qualified"
+            attributeFormDefault="unqualified">
+
+  <!-- common extension elements -->
+  <xsd:element name="in">
+    <xsd:complexType>
+      <xsd:attribute name="source" type="xsd:string" use="optional"/>
+      <xsd:attribute name="target" type="xsd:string" use="optional"/>
+      <xsd:attribute name="sourceExpression" type="xsd:string" use="optional"/>
+      <xsd:attribute name="targetExpression" type="xsd:string" use="optional"/>
+      <xsd:anyAttribute processContents="lax"/>
+    </xsd:complexType>
+  </xsd:element>
+
+  <xsd:element name="out">
+    <xsd:complexType>
+      <xsd:attribute name="source" type="xsd:string" use="optional"/>
+      <xsd:attribute name="target" type="xsd:string" use="optional"/>
+      <xsd:anyAttribute processContents="lax"/>
+    </xsd:complexType>
+  </xsd:element>
+
+  <!-- permissive attribute wildcard for Flowable extension attributes on CMMN elements -->
+  <xsd:attribute name="delegateExpression" type="xsd:string"/>
+  <xsd:attribute name="initiatorVariableName" type="xsd:string"/>
+  <xsd:attribute name="formFieldValidation" type="xsd:string"/>
+  <xsd:attribute name="fallbackToDefaultTenant" type="xsd:string"/>
+  <xsd:attribute name="sameDeployment" type="xsd:string"/>
+  <xsd:attribute name="auto-start" type="xsd:string"/>
+
+  <!-- global wildcard so editors accept other flowable:* children/attributes -->
+  <xsd:complexType name="anyFlowableType" mixed="true">
+    <xsd:sequence>
+      <xsd:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xsd:sequence>
+    <xsd:anyAttribute processContents="lax"/>
+  </xsd:complexType>
+
+</xsd:schema>

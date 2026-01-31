@@ -1,0 +1,10 @@
+{
+  "class": "com.example.Child",
+  "entityType": "Child",
+  "parent": "com.example.Base",
+  "version": 1,
+  "mappings": [
+    { "column": "b", "jsonPath": "$.b_override", "type": "string" },
+    { "column": "c", "jsonPath": "$.c", "type": "string" }
+  ]
+}

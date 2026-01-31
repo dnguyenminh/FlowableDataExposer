@@ -1,0 +1,198 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.6'
+    id 'io.spring.dependency-management' version '1.1.0'
+}
+
+group = 'vn.com.fecredit.chunkedupload'
+version = '1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'com.jayway.jsonpath:json-path:2.9.0'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+    implementation 'org.flowable:flowable-spring-boot-starter:7.2.0'
+
+    // Image / diagram generators for BPMN, CMMN and DMN (used by the new validation/render utility)
+    implementation 'org.flowable:flowable-image-generator:7.2.0'
+    implementation 'org.flowable:flowable-cmmn-image-generator:7.2.0'
+    implementation 'org.flowable:flowable-dmn-image-generator:7.2.0'
+
+    // converters (required for in-process validation + rendering)
+    implementation 'org.flowable:flowable-cmmn-converter:7.2.0'
+    implementation 'org.flowable:flowable-dmn-xml-converter:7.2.0'
+    // Add Flowable DMN engine (provides org.flowable.dmn.api.DmnRuleService)
+    implementation 'org.flowable:flowable-dmn-engine:7.2.0'
+
+    runtimeOnly 'com.h2database:h2:1.4.200'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// Exclude raw Modeler export (keeps the file in the repo for visibility but prevents
+// Flowable's auto-deploy from attempting to parse the invalid Modeler .xml file).
+sourceSets {
+    main {
+        resources {
+            exclude 'cases/orderCase.xml'
+            // Prevent Flowable from auto-deploying the raw/Modeler CMMN; CombinedDeployment
+            // will deploy a normalized, engine-valid payload at runtime instead.
+            // NOTE: keep `cases/orderCase.cmmn` on the classpath so tests run against the
+            // validated CMMN we maintain in src/main/resources/cases/. (previously this
+            // was excluded which caused CombinedDeployment to fall back to the
+            // Modeler export and surface XSD ordering issues)
+            // exclude 'cases/orderCase.cmmn'
+        }
+    }
+}
+
+// Developer helper: validate + render BPMN/CMMN/DMN models found under src/main/resources
+// Produces human-friendly diagnostics and PNG thumbnails in build/model-validator
+task validateModels {
+    group = 'verification'
+    description = 'Validate BPMN/CMMN/DMN model files and render PNG thumbnails to build/model-validator'
+    dependsOn testClasses
+
+    doLast {
+        def outDir = file("${buildDir}/model-validator")
+        outDir.mkdirs()
+        def src = file('src/main/resources')
+        def patterns = ['**/processes/*.bpmn*', '**/cases/*.cmmn', '**/*.dmn']
+        patterns.each { pat ->
+            fileTree(src).matching { include pat }.each { f ->
+                def rel = src.toPath().relativize(f.toPath()).toString()
+                println "Validating & rendering model: ${rel} -> ${outDir}"
+                try {
+                    javaexec {
+                        main = 'vn.com.fecredit.chunkedupload.util.ModelValidatorRenderer'
+                        classpath = sourceSets.test.runtimeClasspath
+                        args = [f.absolutePath, '--out', new File(outDir, f.name + '.png').absolutePath]
+                        // keep JVM reasonably small for image generation in CI
+                        jvmArgs = ['-Xms128m', '-Xmx1g']
+                    }
+                } catch (Exception e) {
+                    def errFile = new File(outDir, f.name + '.error.txt')
+                    errFile.parentFile.mkdirs()
+                    errFile.text = "Model: ${rel}\n\n${e.toString()}\n\n" + (e instanceof org.gradle.process.internal.ExecException ? e.getCause() : '')
+                    println "[WARN] rendering failed for ${rel} — wrote ${errFile}"
+                    // record failure for summary
+                    def _cur = project.ext.has('failedModels') ? project.ext.failedModels : []
+                    project.ext.failedModels = _cur + [rel]
+
+                    // create a visible placeholder PNG so UI/PRs always show a non-transparent thumbnail
+                    try {
+                        def placeholder = new File(outDir, f.name + '.png')
+                        int pw = 1000, ph = 600
+                        def img = new java.awt.image.BufferedImage(pw, ph, java.awt.image.BufferedImage.TYPE_INT_RGB)
+                        def g = img.createGraphics()
+                        try {
+                            g.setColor(java.awt.Color.WHITE)
+                            g.fillRect(0,0,pw,ph)
+                            g.setColor(java.awt.Color.DARK_GRAY)
+                            g.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 28))
+                            def lines = [f.name, 'RENDER FAILED']
+                            def msg = e.getMessage() ?: e.toString()
+                            if (msg.length() > 180) msg = msg.substring(0, 180) + '...'
+                            lines << msg
+                            int y = 80
+                            lines.each { ln ->
+                                g.drawString(ln, 40, y)
+                                y += 40
+                            }
+                            // faint border
+                            g.setColor(new java.awt.Color(0,0,0,40))
+                            g.drawRect(10,10,pw-21,ph-21)
+                        } finally {
+                            g.dispose()
+                        }
+                        javax.imageio.ImageIO.write(img, 'png', placeholder)
+                        println "[INFO] wrote placeholder thumbnail for failed model: ${placeholder}"
+                    } catch (Throwable _t) {
+                        println "[WARN] could not write placeholder image: ${_t.message}"
+                    }
+                }
+            }
+        }
+
+        def failed = project.ext.has('failedModels') ? project.ext.failedModels : []
+        if (failed && failed.size() > 0) {
+            println '\nModel rendering had failures:'
+            failed.each { println " - ${it}" }
+            if (project.hasProperty('failOnError')) {
+                throw new GradleException("validateModels failed for ${failed.size()} model(s); see build/model-validator for details")
+            } else {
+                println '\nNote: task did not fail (use -PfailOnError to fail the build on model errors)'
+            }
+        }
+    }
+}
+
+// validate metadata JSON files and JsonPath expressions
+task validateMetadata {
+    group = 'verification'
+    description = 'Validate metadata JSON files under src/main/resources/metadata'
+    doLast {
+        def metaDir = file('src/main/resources/metadata')
+        if (!metaDir.exists()) {
+            println 'No metadata directory found; nothing to validate.'
+            return
+        }
+        def errors = []
+        fileTree(metaDir).matching { include '*.json' }.each { f ->
+            println "Validating metadata: ${f.name}"
+            try {
+                javaexec {
+                    main = 'vn.com.fecredit.flowable.exposer.service.metadata.MetadataTool'
+                    classpath = sourceSets.test.runtimeClasspath
+                    args = ['--validate', f.absolutePath]
+                    jvmArgs = ['-Xms64m','-Xmx512m']
+                }
+            } catch (Exception e) {
+                println "  [ERROR] ${e.message}"
+                errors << f.name
+            }
+        }
+        if (!errors.isEmpty()) throw new GradleException("validateMetadata failed for: ${errors}")
+    }
+}
+
+// Import metadata files into DB (runs Spring Boot importer)
+task exportMetadataToDb {
+    group = 'application'
+    description = 'Import metadata JSON files from classpath into sys_expose_class_def (DB)'
+    doLast {
+        javaexec {
+            main = 'vn.com.fecredit.flowable.exposer.service.metadata.MetadataImporterApplication'
+            classpath = sourceSets.main.runtimeClasspath
+            args = ['--importFiles']
+            jvmArgs = ['-Xms128m','-Xmx1g']
+        }
+    }
+}
+
+// Convenience alias used by some CI/dev scripts
+tasks.register('renderModels') {
+    group = 'verification'
+    description = 'Alias for validateModels (keeps historical naming)'
+    dependsOn validateModels
+}
