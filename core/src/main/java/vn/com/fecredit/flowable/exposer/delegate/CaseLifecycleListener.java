@@ -7,34 +7,63 @@ import org.springframework.stereotype.Component;
 import vn.com.fecredit.flowable.exposer.entity.SysExposeRequest;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeRequestRepository;
 
+/**
+ * Listener invoked during case/task lifecycle to capture a lightweight
+ * SysExposeRequest for downstream processing (indexing/reindexing).
+ *
+ * Design notes:
+ * - non-fatal: listener errors are swallowed to avoid breaking Flowable tasks
+ * - best-effort entityType inference from processDefinitionId is performed
+ */
 @Component("caseLifecycleListener")
 public class CaseLifecycleListener implements TaskListener {
 
     @Autowired
     private SysExposeRequestRepository requestRepo;
 
+    /**
+     * Task listener entry point. Records a SysExposeRequest when a task is
+     * associated with a case/process instance.
+     */
     @Override
     public void notify(DelegateTask delegateTask) {
         try {
-            String caseInstanceId = delegateTask.getProcessInstanceId();
+            String caseInstanceId = extractCaseInstanceId(delegateTask);
             if (caseInstanceId == null) return;
 
-            // infer entity type from process definition key (best-effort) or leave null
-            String processDefinitionKey = delegateTask.getProcessDefinitionId();
-            String entityType = null;
-            if (processDefinitionKey != null && processDefinitionKey.contains(":")) {
-                // processDefinitionId format: key:version:id — try to extract key
-                entityType = processDefinitionKey.split(":")[0];
-            }
-
-            SysExposeRequest req = new SysExposeRequest();
-            req.setCaseInstanceId(caseInstanceId);
-            req.setEntityType(entityType);
-            req.setRequestedBy(delegateTask.getAssignee());
-            requestRepo.save(req);
+            String entityType = inferEntityType(delegateTask.getProcessDefinitionId());
+            createAndSaveRequest(caseInstanceId, entityType, delegateTask);
         } catch (Exception ex) {
-            // don't fail the task on listener error; log if logging available
+            // non-fatal: do not fail the BPMN/CMMN task because of listener errors
             System.err.println("CaseLifecycleListener failed: " + ex.getMessage());
         }
+    }
+
+    /**
+     * Extract the case/process instance id from the delegate (null-safe).
+     */
+    private String extractCaseInstanceId(DelegateTask delegateTask) {
+        return delegateTask == null ? null : delegateTask.getProcessInstanceId();
+    }
+
+    /**
+     * Best-effort inference of entityType from a processDefinitionId.
+     * Expected format: key:version:id — returns the 'key' portion or null.
+     */
+    private String inferEntityType(String processDefinitionId) {
+        if (processDefinitionId == null) return null;
+        if (!processDefinitionId.contains(":")) return null;
+        return processDefinitionId.split(":", 2)[0];
+    }
+
+    /**
+     * Build and persist a SysExposeRequest from the provided inputs.
+     */
+    private void createAndSaveRequest(String caseInstanceId, String entityType, DelegateTask delegateTask) {
+        SysExposeRequest req = new SysExposeRequest();
+        req.setCaseInstanceId(caseInstanceId);
+        req.setEntityType(entityType);
+        req.setRequestedBy(delegateTask == null ? null : delegateTask.getAssignee());
+        requestRepo.save(req);
     }
 }
