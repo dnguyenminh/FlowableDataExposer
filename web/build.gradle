@@ -1,0 +1,69 @@
+plugins {
+  id 'org.springframework.boot' version '3.2.6'
+  id 'io.spring.dependency-management' version '1.1.0'
+  id 'java'
+}
+
+group = 'vn.com.fecredit.chunkedupload'
+version = '1.0-SNAPSHOT'
+
+java {
+  toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+  implementation project(':core')
+  implementation 'org.springframework.boot:spring-boot-starter'
+  implementation 'org.springframework.boot:spring-boot-starter-web'
+  implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+  // keep Flowable starters available on the web app classpath
+  implementation 'org.flowable:flowable-spring-boot-starter:7.2.0'
+
+  testImplementation platform('org.junit:junit-bom:5.10.0')
+  testImplementation 'org.junit.jupiter:junit-jupiter'
+  testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+// Web module sources: only include the web controller package from the canonical tree
+sourceSets {
+  main {
+    // web module owns its controller sources (copied into web/src). Business-process
+    // assets are kept in the canonical repo resources directory and exposed on
+    // the web module classpath for runtime & validation tasks.
+    java {
+      srcDirs = ['src/main/java']
+    }
+    resources {
+      srcDirs = ['src/main/resources', '../src/main/resources']
+      include 'processes/**', 'cases/**', 'decisions/**', 'metadata/**', 'static/**'
+    }
+  }
+  test {
+    java {
+      srcDirs = ['src/test/java', '../src/test/java']
+      // include only web-focused tests that live in the canonical test tree
+      include 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
+              'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
+              'vn/com/fecredit/flowable/exposer/OrderControllerTest.java',
+              'vn/com/fecredit/flowable/exposer/OrdersUiTest.java',
+              'vn/com/fecredit/flowable/exposer/OrdersE2eIT.java',
+              'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
+              'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
+    }
+    resources.srcDirs = ['src/test/resources', '../src/test/resources']
+  }
+}
+
+// During the ongoing repo migration there may be legitimate duplicates between
+// web/src/main/resources and the canonical repo resources. Prefer the web/
+// copy and avoid failing the build on duplicates until the cleanup PR is
+// applied.
+tasks.processResources {
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+bootJar {
+  mainClass = 'vn.com.fecredit.flowable.exposer.FlowableExposerApplication'
+}

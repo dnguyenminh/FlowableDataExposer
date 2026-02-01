@@ -1,1 +1,4 @@
 rootProject.name = 'FlowableDataExposer'
+
+// New modules: core (library) and web (Spring Boot app + process resources)
+include 'core', 'web'

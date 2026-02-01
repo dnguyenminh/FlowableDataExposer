@@ -1,0 +1,19 @@
+{
+  "class": "Order",
+  "entityType": "Order",
+  "version": 1,
+  "enabled": true,
+  "description": "Order example mappings",
+  "mappings": [
+    { "column": "total_amount", "jsonPath": "$.total", "type": "decimal", "nullable": false, "exportToPlain": true, "plainColumn": "order_total" },
+    { "column": "customer_id", "class": "Customer", "jsonPath": "$.id", "type": "string", "exportToPlain": true, "plainColumn": "customer_id" },
+    { "column": "customer_name", "class": "Customer", "jsonPath": "$.name", "type": "string", "exportToPlain": true, "plainColumn": "customer_name" },
+    { "column": "priority", "class": "Meta", "jsonPath": "$.priority", "type": "string", "exportToPlain": true, "plainColumn": "order_priority" },
+    { "column": "approval_status", "class": "ApprovalDecision", "jsonPath": "$.status", "type": "string", "exportToPlain": true, "plainColumn": "approval_status" },
+    { "column": "decision_reason", "class": "ApprovalDecision", "jsonPath": "$.reason", "type": "string", "exportToPlain": true, "plainColumn": "decision_reason" },
+    { "column": "discount", "class": "OrderRules", "jsonPath": "$.discount", "type": "decimal", "exportToPlain": true, "plainColumn": "discount" },
+    { "column": "shipping_fee", "class": "OrderRules", "jsonPath": "$.shippingFee", "type": "decimal", "exportToPlain": true, "plainColumn": "shipping_fee" },
+    { "column": "item_1_id", "class": "Item", "jsonPath": "$.id", "arrayIndex": 0, "type": "string" },
+    { "column": "color_attr", "class": "Params", "jsonPath": "$.color", "type": "string", "nullable": true }
+  ]
+}

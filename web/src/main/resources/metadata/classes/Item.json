@@ -1,0 +1,8 @@
+{
+  "class": "Item",
+  "description": "Item in order",
+  "jsonPath": "$.items[*]",
+  "fields": [
+    { "name": "id", "jsonPath": "$.id", "type": "string" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "class": "Meta",
+  "description": "Metadata for the order",
+  "jsonPath": "$.meta",
+  "fields": [
+    { "name": "priority", "jsonPath": "$.priority", "type": "string" }
+  ]
+}

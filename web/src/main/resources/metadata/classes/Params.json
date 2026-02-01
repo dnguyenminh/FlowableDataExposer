@@ -1,0 +1,7 @@
+{
+  "class": "Params",
+  "jsonPath": "$.params",
+  "fields": [
+    { "name": "color", "jsonPath": "$.color", "type": "string", "nullable": true }
+  ]
+}

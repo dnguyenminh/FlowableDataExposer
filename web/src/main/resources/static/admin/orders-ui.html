@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Orders — Demo UI</title>
+  <style>body{font-family:Inter,Arial,Helvetica,sans-serif;padding:20px}label{display:block;margin-top:8px}input,textarea{width:100%;max-width:520px;padding:8px}</style>
+</head>
+<body>
+  <h1>Orders (demo)</h1>
+  <form id="frm">
+    <label>Start type
+      <select id="type"><option value="bpmn">BPMN (orderProcess)</option><option value="cmmn">CMMN (orderCase)</option></select>
+    </label>
+    <label>Payload (JSON)</label>
+    <textarea id="payload" rows="6">{"total": 123.45, "customerId": "C123", "meta": {"priority":"HIGH"}}</textarea>
+    <div style="margin-top:12px"><button type="button" id="start">Start Order</button></div>
+  </form>
+  <pre id="out" aria-live="polite" style="background:#0f1720;color:#e6f1ff;padding:12px;border-radius:6px;margin-top:18px;white-space:pre-wrap"></pre>
+
+  <script>
+    const out = document.getElementById('out');
+    document.getElementById('start').addEventListener('click', async () => {
+      out.textContent = 'Starting...';
+      try {
+        const type = document.getElementById('type').value;
+        const payload = JSON.parse(document.getElementById('payload').value);
+        const res = await fetch('/api/orders?type=' + encodeURIComponent(type), {method: 'POST', body: JSON.stringify(payload), headers: {'content-type':'application/json'}});
+        const j = await res.json();
+        out.textContent = JSON.stringify(j, null, 2);
+      } catch (err) {
+        out.textContent = 'Error: ' + err;
+      }
+    });
+  </script>
+</body>
+</html>

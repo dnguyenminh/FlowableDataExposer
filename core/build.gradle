@@ -1,0 +1,82 @@
+plugins {
+  id 'java-library'
+  id 'io.spring.dependency-management' version '1.1.0'
+}
+
+group = 'vn.com.fecredit.chunkedupload'
+version = '1.0-SNAPSHOT'
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(21)
+  }
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+  api 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+  api 'com.jayway.jsonpath:json-path:2.9.0'
+  api 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
+  // Flowable engine pieces used by core services
+  api 'org.flowable:flowable-dmn-engine:7.2.0'
+  api 'org.flowable:flowable-spring-boot-starter:7.2.0'
+
+  // Image/renderer + converters (used by ModelValidatorRenderer)
+  implementation 'org.flowable:flowable-image-generator:7.2.0'
+  implementation 'org.flowable:flowable-cmmn-image-generator:7.2.0'
+  implementation 'org.flowable:flowable-dmn-image-generator:7.2.0'
+  implementation 'org.flowable:flowable-cmmn-converter:7.2.0'
+  implementation 'org.flowable:flowable-dmn-xml-converter:7.2.0'
+
+  implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+  runtimeOnly 'com.h2database:h2:1.4.200'
+
+  testImplementation platform('org.junit:junit-bom:5.10.0')
+  testImplementation 'org.junit.jupiter:junit-jupiter'
+  testImplementation 'org.springframework.boot:spring-boot-starter-test'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+  imports {
+    mavenBom 'org.springframework.boot:spring-boot-dependencies:3.2.6'
+  }
+}
+
+// Use the canonical source tree in the repository root for a smooth incremental migration.
+sourceSets {
+  main {
+    java {
+      // compile module-local core sources first, then fall back to the canonical
+      // repo tree during the incremental migration.
+      srcDirs = ['src/main/java', '../src/main/java']
+      exclude 'vn/com/fecredit/flowable/exposer/web/**'
+    }
+    resources {
+      // tests in core rely on some resources (keep pointing to repo resources)
+      srcDirs = ['../src/main/resources']
+      exclude 'static/**'
+    }
+  }
+  test {
+    java.srcDirs = ['../src/test/java']
+    resources.srcDirs = ['../src/test/resources']
+    java {
+      // exclude web-controller tests (they belong to web)
+      exclude 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
+              'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
+              'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
+              'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
+    }
+  }
+}
+
+// During migration a legacy placeholder test may be present in the canonical test tree;
+// ensure core doesn't accidentally compile it.
+tasks.withType(Test).configureEach {
+  // exclude the legacy placeholder filename from core test compilation
+  exclude '**/MetadataControllerTest_LegacyPlaceholder.java'
+}

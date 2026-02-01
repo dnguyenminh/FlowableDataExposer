@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Correct DMN namespace and decision id.
+  - namespace must contain 'dmn' so engine/XSD detectors recognise the file
+  - decision id aligned with the runtime decisionKey ("orderRules")
+-->
+<!--
+  Keep the legacy DMN decision id `orderRulesTable` for compatibility with older deployments.
+  Runtime (DmnDecisionDelegate) supports both `orderRulesTable` and `orderRules` as decision keys
+  and will always expose the engine outputs under the process variable name `orderRules`.
+-->
+<definitions xmlns="http://www.omg.org/spec/DMN/20151101/dmn.xsd" 
+             targetNamespace="http://flowable.org/dmn" 
+             name="Order Rules" id="orderRulesTable">
+  <decision id="orderRulesTable" name="Order Rules Table">
+    <decisionTable id="decisionTable_1" hitPolicy="FIRST">
+      <input id="input1" label="Total Amount">
+        <inputExpression id="inputExpression1" typeRef="double">
+          <text>total</text>
+        </inputExpression>
+      </input>
+      <input id="input2" label="Region">
+        <inputExpression id="inputExpression2" typeRef="string">
+          <text>params.region</text>
+        </inputExpression>
+      </input>
+      <output id="output1" label="Discount" name="discount" typeRef="double"/>
+      <output id="output2" label="Shipping Fee" name="shippingFee" typeRef="double"/>
+
+      <rule id="rule1">
+        <inputEntry id="inputEntry1_1"><text>&gt; 1000000</text></inputEntry>
+        <inputEntry id="inputEntry1_2"><text>"HCM"</text></inputEntry>
+        <outputEntry id="outputEntry1_1"><text>0.1</text></outputEntry> <outputEntry id="outputEntry1_2"><text>0</text></outputEntry>   </rule>
+      <rule id="rule2">
+        <inputEntry id="inputEntry2_1"><text>-</text></inputEntry>
+        <inputEntry id="inputEntry2_2"><text>"Hanoi"</text></inputEntry>
+        <outputEntry id="outputEntry2_1"><text>0</text></outputEntry>
+        <outputEntry id="outputEntry2_2"><text>30000</text></outputEntry>
+      </rule>
+      <rule id="rule3">
+        <inputEntry id="inputEntry3_1"><text>-</text></inputEntry>
+        <inputEntry id="inputEntry3_2"><text>-</text></inputEntry>
+        <outputEntry id="outputEntry3_1"><text>0</text></outputEntry>
+        <outputEntry id="outputEntry3_2"><text>50000</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

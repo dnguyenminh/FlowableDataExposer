@@ -1,0 +1,8 @@
+{
+  "class": "Order",
+  "entityType": "Order",
+  "jsonPath": "$",
+  "mappings": [
+    { "column": "customer_id", "class": "Customer", "jsonPath": "$.id", "exportToPlain": true, "plainColumn": "customer_id" }
+  ]
+}

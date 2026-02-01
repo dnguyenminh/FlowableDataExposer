@@ -1,0 +1,9 @@
+{
+  "class": "ApprovalDecision",
+  "description": "Decision result from approval flow",
+  "jsonPath": "$.approvalDecision",
+  "fields": [
+    { "name": "status", "jsonPath": "$.status", "type": "string" },
+    { "name": "reason", "jsonPath": "$.reason", "type": "string" }
+  ]
+}

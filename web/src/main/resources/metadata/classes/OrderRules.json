@@ -1,0 +1,9 @@
+{
+  "class": "OrderRules",
+  "description": "Rules/decision results produced by DMN",
+  "jsonPath": "$.orderRules",
+  "fields": [
+    { "name": "discount", "jsonPath": "$.discount", "type": "decimal" },
+    { "name": "shippingFee", "jsonPath": "$.shippingFee", "type": "decimal" }
+  ]
+}
