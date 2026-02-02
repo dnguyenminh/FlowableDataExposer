@@ -28,15 +28,20 @@ public class CaseLifecycleListener implements TaskListener {
     @Override
     public void notify(DelegateTask delegateTask) {
         try {
-            String caseInstanceId = extractCaseInstanceId(delegateTask);
-            if (caseInstanceId == null) return;
-
-            String entityType = inferEntityType(delegateTask.getProcessDefinitionId());
-            createAndSaveRequest(caseInstanceId, entityType, delegateTask);
+            handleNotify(delegateTask);
         } catch (Exception ex) {
             // non-fatal: do not fail the BPMN/CMMN task because of listener errors
-            System.err.println("CaseLifecycleListener failed: " + ex.getMessage());
+            logError(ex);
         }
+    }
+
+    /** Small, focused handler extracted to keep notify() concise and testable. */
+    private void handleNotify(DelegateTask delegateTask) {
+        String caseInstanceId = extractCaseInstanceId(delegateTask);
+        if (caseInstanceId == null) return;
+
+        String entityType = inferEntityType(delegateTask == null ? null : delegateTask.getProcessDefinitionId());
+        createAndSaveRequest(caseInstanceId, entityType, delegateTask);
     }
 
     /**
@@ -66,4 +71,14 @@ public class CaseLifecycleListener implements TaskListener {
         req.setRequestedBy(delegateTask == null ? null : delegateTask.getAssignee());
         requestRepo.save(req);
     }
+
+    /** Centralize error reporting so behaviour is easy to change/test. */
+    private void logError(Exception ex) {
+        try {
+            System.err.println("CaseLifecycleListener failed: " + ex.getMessage());
+        } catch (Throwable ignore) {
+            // absolutely never throw from the listener's error path
+        }
+    }
 }
+

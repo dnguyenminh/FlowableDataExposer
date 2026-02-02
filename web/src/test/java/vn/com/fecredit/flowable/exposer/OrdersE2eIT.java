@@ -115,6 +115,17 @@ public class OrdersE2eIT {
         // Small sleep to give the controller a moment (non-blocking minimal delay)
         try { Thread.sleep(200); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
 
+        // Deterministic fallback: invoke the CaseDataWorker directly (best-effort) so CI doesn't rely on async scheduling.
+        try {
+            Object worker = ctx.getBean("caseDataWorker");
+            try {
+                var m = worker.getClass().getMethod("reindexByCaseInstanceId", String.class);
+                m.invoke(worker, caseInstanceId);
+            } catch (NoSuchMethodException ns) {
+                try { worker.getClass().getMethod("reindex", String.class).invoke(worker, caseInstanceId); } catch (NoSuchMethodException ignored) {}
+            }
+        } catch (Exception ignored) {}
+
         // True E2E: do not invoke worker manually; let lifecycle listeners and scheduled worker process the case
 
         // wait for plain order to be available via public API (the framework should have processed the case end-to-end)

@@ -115,4 +115,68 @@ class DmnDecisionDelegateTest {
         verify(exec).setVariable("shippingFee", 22222.0d);
         verify(exec).setVariable("approvalDecision", Map.of());
     }
+
+    @Test
+    void engine_path_handlesMultiResult_setsListWithoutTopLevelOutputs() {
+        DmnDecisionService dmnService = mock(DmnDecisionService.class);
+        ExecuteDecisionBuilder builder = mock(ExecuteDecisionBuilder.class);
+
+        Map<String,Object> r1 = new HashMap<>();
+        r1.put("discount", 0.1);
+        Map<String,Object> r2 = new HashMap<>();
+        r2.put("shippingFee", 11111.0);
+
+        when(dmnService.createExecuteDecisionBuilder()).thenReturn(builder);
+        when(builder.decisionKey(eq("orderRulesTable"))).thenReturn(builder);
+        when(builder.decisionKey(eq("orderRules"))).thenReturn(builder);
+        when(builder.variables(anyMap())).thenReturn(builder);
+        when(builder.execute()).thenReturn(List.of(r1, r2));
+
+        @SuppressWarnings("unchecked")
+        ObjectProvider<DmnDecisionService> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(dmnService);
+
+        DmnDecisionDelegate delegate = new DmnDecisionDelegate(provider);
+
+        DelegateExecution exec = mock(DelegateExecution.class);
+        when(exec.getVariables()).thenReturn(Map.of("total", 10));
+
+        delegate.execute(exec);
+
+        ArgumentCaptor<List> captor = ArgumentCaptor.forClass((Class) List.class);
+        verify(exec).setVariable(eq("orderRules"), captor.capture());
+        List<Map<String,Object>> captured = captor.getValue();
+        assertThat(captured).hasSize(2);
+
+        verify(exec, never()).setVariable(eq("discount"), any());
+        verify(exec, never()).setVariable(eq("shippingFee"), any());
+        verify(exec).setVariable("approvalDecision", Map.of());
+    }
+
+    @Test
+    void engine_path_emptyResult_setsEmptyMaps() {
+        DmnDecisionService dmnService = mock(DmnDecisionService.class);
+        ExecuteDecisionBuilder builder = mock(ExecuteDecisionBuilder.class);
+
+        when(dmnService.createExecuteDecisionBuilder()).thenReturn(builder);
+        when(builder.decisionKey(eq("orderRulesTable"))).thenReturn(builder);
+        when(builder.decisionKey(eq("orderRules"))).thenReturn(builder);
+        when(builder.variables(anyMap())).thenReturn(builder);
+        when(builder.execute()).thenReturn(List.of());
+
+        @SuppressWarnings("unchecked")
+        ObjectProvider<DmnDecisionService> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(dmnService);
+
+        DmnDecisionDelegate delegate = new DmnDecisionDelegate(provider);
+
+        DelegateExecution exec = mock(DelegateExecution.class);
+        when(exec.getVariables()).thenReturn(Map.of());
+
+        delegate.execute(exec);
+
+        verify(exec).setVariable("orderRules", Collections.emptyMap());
+        verify(exec).setVariable("approvalDecision", Map.of());
+    }
 }
+

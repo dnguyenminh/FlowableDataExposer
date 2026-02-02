@@ -22,9 +22,37 @@ sourceSets {
 subprojects {
     apply plugin: 'java'
     repositories { mavenCentral() }
+
+    // Enforce style checks (Javadoc + method length) across modules
+    apply plugin: 'checkstyle'
+    checkstyle {
+        toolVersion = '10.12.0'
+        configDirectory = rootProject.file('config/checkstyle')
+        maxWarnings = 0
+    }
+
     java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
     test {
         useJUnitPlatform()
+    }
+
+    // Configure Checkstyle reports
+    tasks.withType(org.gradle.api.plugins.quality.Checkstyle).configureEach {
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+        }
+    }
+
+    // NOTE: javadoc checks are produced as a *report* (heuristic) so the team can
+    // address legacy gaps incrementally. The authoritative, blocking checks are
+    // enforced for method-length and hygiene (UnusedImports) via checkstyleMain.
+
+    // Make it easy to run only the production checks locally
+    tasks.register('enforceJavadocAndLength') {
+        group = 'verification'
+        description = 'Run Checkstyle for main sources (method-length + hygiene)'
+        dependsOn tasks.named('checkstyleMain')
     }
 }
 

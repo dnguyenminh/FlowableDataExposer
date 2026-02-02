@@ -4,6 +4,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
 
+/**
+ * POJO that represents the canonical metadata JSON used to map JSON payloads
+ * into index/plain columns and to drive the metadata UI.
+ *
+ * <p>Fields are intentionally public to simplify Jackson deserialization
+ * and make test fixtures concise.</p>
+ */
 public class MetadataDefinition {
     @JsonProperty("class")
     public String _class; // 'class' is a reserved word in Java so JSON maps to _class

@@ -9,6 +9,15 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Performs runtime annotation of JSON-like maps using metadata definitions.
+ *
+ * <p>The annotator will add minimal {@code @class} markers and recurse into
+ * nested objects/arrays so downstream components (JsonPath, indexer) can
+ * reliably resolve class-scoped mappings. This is intentionally defensive
+ * and uses reflection against {@code MetadataResolver} so it remains
+ * compatible with test or trimmed classpaths.</p>
+ */
 @Component
 public class MetadataAnnotator {
 

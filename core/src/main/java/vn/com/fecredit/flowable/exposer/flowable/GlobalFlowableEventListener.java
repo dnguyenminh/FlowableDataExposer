@@ -7,6 +7,13 @@ import org.springframework.stereotype.Component;
 import vn.com.fecredit.flowable.exposer.entity.SysExposeRequest;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeRequestRepository;
 
+/**
+ * Global, best-effort handler that converts Flowable runtime events into
+ * lightweight {@code SysExposeRequest} rows for asynchronous indexing.
+ *
+ * <p>Important: this class is invoked reflectively (or via a proxy) so it
+ * must tolerate a variety of event implementations and never throw.</p>
+ */
 @Component
 public class GlobalFlowableEventListener {
 

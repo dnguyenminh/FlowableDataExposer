@@ -12,6 +12,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * DMN evaluation delegate used by the order process.
+ *
+ * <p>This delegate prefers the engine's DMN APIs when available and falls
+ * back to a deterministic Java implementation when the DMN engine is not
+ * present on the classpath (useful for lightweight test profiles).</p>
+ */
 @Component("dmnDecisionDelegate")
 public class DmnDecisionDelegate implements JavaDelegate {
     private final DmnDecisionService dmnDecisionService; // may be null in constrained classpaths
@@ -20,90 +27,99 @@ public class DmnDecisionDelegate implements JavaDelegate {
         this.dmnDecisionService = dmnDecisionServiceProvider.getIfAvailable();
     }
 
+    /**
+     * Entry point invoked by Flowable. Keep this method short by delegating
+     * to helpers (engine path, application of results, and Java fallback).
+     */
     @Override
     public void execute(DelegateExecution execution) {
-        // Prefer the engine-backed DMN evaluation when available so runtime behavior
-        // matches production DMN execution (also keeps model validation meaningful).
         if (dmnDecisionService != null) {
             @SuppressWarnings("unchecked")
             Map<String, Object> vars = execution.getVariables();
-
-            List<Map<String, Object>> result = null;
-
-            // The DMN resource historically used id `orderRulesTable`; newer canonical id is `orderRules`.
-            // For backward compatibility try both decision keys (legacy first) and keep the
-            // process variable name stable as `orderRules`.
-            String[] decisionKeys = new String[] {"orderRulesTable", "orderRules"};
-
-            // Prefer the newer single-result API when present (avoid deprecated execute()).
-            // Use reflection so this code remains compatible across Flowable minor versions.
-            for (String key : decisionKeys) {
-                if (result != null && !result.isEmpty()) break;
-                try {
-                    Method newer = dmnDecisionService.getClass().getMethod("evaluateDecisionTableByKey", String.class, Map.class);
-                    Object r = newer.invoke(dmnDecisionService, key, vars);
-                    if (r instanceof List) {
-                        //noinspection unchecked
-                        result = (List<Map<String, Object>>) r;
-                        break;
-                    }
-                } catch (NoSuchMethodException ignored) {
-                    // older Flowable: will use builder API below
-                    break;
-                } catch (Throwable t) {
-                    // reflection failed for this key, try the next one
-                }
-            }
-
-            if (result == null) {
-                // backward-compatible builder-based call (try legacy then new key)
-                //noinspection deprecation
-                for (String key : decisionKeys) {
-                    try {
-                        // if we get a non-empty result, stop
-                        result = dmnDecisionService.createExecuteDecisionBuilder()
-                            .decisionKey(key)
-                            .variables(vars)
-                            .execute();
-                        if (result != null && !result.isEmpty()) break;
-                    } catch (Throwable t) {
-                        // missing decision or execution error for this key — try next
-                        result = null;
-                    }
-                }
-            }
-
-            // store engine result under a stable variable name that matches the new DMN
-            // keep the old variable to remain backwards-compatible for callers that still
-            // reference `approvalDecision` (set to empty map since old DMN is replaced)
-            if (result == null || result.isEmpty()) {
-                execution.setVariable("orderRules", Collections.emptyMap());
-                execution.setVariable("approvalDecision", Collections.emptyMap());
-            } else if (result.size() == 1) {
-                Map<String,Object> r = result.get(0);
-                execution.setVariable("orderRules", r);
-                // also expose individual outputs as top-level variables for convenience
-                if (r.containsKey("discount")) execution.setVariable("discount", r.get("discount"));
-                if (r.containsKey("shippingFee")) execution.setVariable("shippingFee", r.get("shippingFee"));
-                execution.setVariable("approvalDecision", Collections.emptyMap());
-            } else {
-                execution.setVariable("orderRules", result);
-                execution.setVariable("approvalDecision", Collections.emptyMap());
-            }
+            List<Map<String, Object>> result = evaluateWithEngine(vars);
+            applyDecisionResult(execution, result);
             return;
         }
 
-        // Defensive fallback: reproduce DMN rules in Java so tests can still run
-        // on constrained classpaths (this branch should be rare now that the DMN
-        // starter is on the classpath).
+        // Engine not available on the classpath — use a deterministic Java fallback.
+        javaFallback(execution);
+    }
+
+    /** Try engine-backed evaluation: reflection-first (new API) then builder-based legacy API. */
+    private List<Map<String, Object>> evaluateWithEngine(Map<String, Object> vars) {
+        String[] keys = new String[] {"orderRulesTable", "orderRules"};
+        List<Map<String, Object>> result = null;
+
+        for (String key : keys) {
+            result = tryReflectionEvaluate(key, vars);
+            if (result != null && !result.isEmpty()) return result;
+        }
+
+        for (String key : keys) {
+            result = tryBuilderEvaluate(key, vars);
+            if (result != null && !result.isEmpty()) return result;
+        }
+
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> tryReflectionEvaluate(String key, Map<String, Object> vars) {
+        try {
+            Method newer = dmnDecisionService.getClass().getMethod("evaluateDecisionTableByKey", String.class, Map.class);
+            Object r = newer.invoke(dmnDecisionService, key, vars);
+            if (r instanceof List) return (List<Map<String, Object>>) r;
+        } catch (NoSuchMethodException ignored) {
+            // older Flowable versions — builder API will be used
+        } catch (Throwable ignored) {
+            // reflection attempted but failed for this key
+        }
+        return null;
+    }
+
+    private List<Map<String, Object>> tryBuilderEvaluate(String key, Map<String, Object> vars) {
+        try {
+            //noinspection deprecation
+            return dmnDecisionService.createExecuteDecisionBuilder()
+                .decisionKey(key)
+                .variables(vars)
+                .execute();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** Apply engine/java decision result to the execution (keeps backward compatibility). */
+    private void applyDecisionResult(DelegateExecution execution, List<Map<String, Object>> result) {
+        if (result == null || result.isEmpty()) {
+            execution.setVariable("orderRules", Collections.emptyMap());
+            execution.setVariable("approvalDecision", Collections.emptyMap());
+            return;
+        }
+
+        if (result.size() == 1) {
+            Map<String, Object> r = result.get(0);
+            execution.setVariable("orderRules", r);
+            if (r.containsKey("discount")) execution.setVariable("discount", r.get("discount"));
+            if (r.containsKey("shippingFee")) execution.setVariable("shippingFee", r.get("shippingFee"));
+            execution.setVariable("approvalDecision", Collections.emptyMap());
+            return;
+        }
+
+        execution.setVariable("orderRules", result);
+        execution.setVariable("approvalDecision", Collections.emptyMap());
+    }
+
+    /** Simple, deterministic Java implementation used when DMN engine is absent. */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void javaFallback(DelegateExecution execution) {
         Object totalObj = execution.getVariable("total");
         double total = 0.0;
         if (totalObj instanceof Number) total = ((Number) totalObj).doubleValue();
-        Object regionObj = execution.getVariable("params") != null ? ((Map<?,?>)execution.getVariable("params")).get("region") : null;
+        Object regionObj = execution.getVariable("params") != null ? ((Map)execution.getVariable("params")).get("region") : null;
         String region = regionObj == null ? null : String.valueOf(regionObj);
 
         Map<String, Object> decision = new HashMap<>();
-        // replicate the new DMN behaviour (discount + shippingFee)
         if (total > 1_000_000 && "HCM".equalsIgnoreCase(region)) {
             decision.put("discount", 0.1);
             decision.put("shippingFee", 0.0);
@@ -114,6 +130,7 @@ public class DmnDecisionDelegate implements JavaDelegate {
             decision.put("discount", 0.0);
             decision.put("shippingFee", 50000.0);
         }
+
         execution.setVariable("orderRules", decision);
         execution.setVariable("discount", decision.get("discount"));
         execution.setVariable("shippingFee", decision.get("shippingFee"));

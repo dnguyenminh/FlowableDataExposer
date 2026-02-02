@@ -34,6 +34,16 @@ jobs:
         env:
           TERM: xterm
 
+      - name: Run Checkstyle (Method-length & hygiene)
+        run: ./gradlew --no-daemon :core:checkstyleMain :web:checkstyleMain --warning-mode=none
+        env:
+          TERM: xterm
+
+      - name: Generate Javadoc report (heuristic, non-blocking)
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -Command "& ./tools/report-missing-javadoc.ps1 ; Get-ChildItem build/reports -Recurse | Select-Object FullName"
+        env:
+          TERM: xterm
+
       - name: Run metadata/model validations (fast-fail separate)
         run: ./gradlew --no-daemon validateModels validateMetadata || true
 
@@ -88,6 +98,15 @@ jobs:
           path: |
             build/test-results/test
             build/reports/tests/test
+
+      - name: Upload checkstyle reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkstyle-reports
+          path: |
+            core/build/reports/checkstyle
+            web/build/reports/checkstyle
+          if-no-files-found: ignore
 
       - name: Upload model-validator output (if any)
         uses: actions/upload-artifact@v4

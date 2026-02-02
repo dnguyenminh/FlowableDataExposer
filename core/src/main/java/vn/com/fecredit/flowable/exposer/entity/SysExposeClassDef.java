@@ -3,6 +3,11 @@ package vn.com.fecredit.flowable.exposer.entity;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
+/**
+ * Entity representing an admin-managed metadata override stored in
+ * <code>sys_expose_class_def</code>. The JSON payload contains a
+ * {@link vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition}.
+ */
 @Entity
 @Table(name = "sys_expose_class_def")
 public class SysExposeClassDef {

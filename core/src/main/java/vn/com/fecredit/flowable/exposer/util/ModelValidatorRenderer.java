@@ -1,8 +1,7 @@
-package vn.com.fecredit.chunkedupload.util;
+package vn.com.fecredit.flowable.exposer.util;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,7 +21,6 @@ import javax.xml.validation.Schema;
 import javax.xml.validation.SchemaFactory;
 import javax.xml.validation.Validator;
 
-import org.flowable.bpmn.model.BpmnModel;
 import org.w3c.dom.Document;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;

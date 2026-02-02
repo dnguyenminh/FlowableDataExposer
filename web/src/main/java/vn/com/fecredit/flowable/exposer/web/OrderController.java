@@ -51,8 +51,9 @@ public class OrderController {
     public ResponseEntity<?> startOrder(@RequestBody JsonNode body, @RequestParam(required = false) String type) {
         try {
             Map<String, Object> vars = extractVars(body);
-            String id = "process".equalsIgnoreCase(type) ? startBpmnProcess(vars) : startCmmnCase(vars);
-            String kind = "cmmn".equalsIgnoreCase(type) ? "case" : "process";
+            boolean isCmmn = "cmmn".equalsIgnoreCase(type);
+            String id = isCmmn ? startCmmnCase(vars) : startBpmnProcess(vars);
+            String kind = isCmmn ? "case" : "process";
             return ResponseEntity.status(201).body(Map.of("id", id, "kind", kind));
         } catch (Exception ex) {
             return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));

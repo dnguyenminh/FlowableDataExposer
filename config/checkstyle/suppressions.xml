@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+    "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+    "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+    <!-- Ignore test sources and generated/legacy trees -->
+    <suppress files=".*Test\.java$"/>
+    <suppress files=".*/src-bk1/.*"/>
+    <suppress files=".*/model-validator/.*"/>
+    <suppress files=".*MetadataControllerTest_LegacyPlaceholder\.java"/>
+</suppressions>

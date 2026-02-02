@@ -1,4 +1,4 @@
-package vn.com.fecredit.chunkedupload.util;
+package vn.com.fecredit.flowable.exposer.util;
 
 import javax.imageio.ImageIO;
 import javax.xml.parsers.DocumentBuilder;
@@ -6,7 +6,6 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 

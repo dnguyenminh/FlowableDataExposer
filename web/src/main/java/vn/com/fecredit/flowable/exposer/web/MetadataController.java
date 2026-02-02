@@ -12,6 +12,12 @@ import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Management endpoints for metadata: validation, field-check and admin import.
+ *
+ * <p>Endpoints are used by the metadata UI and by CI/automation to validate
+ * and apply mapping changes without requiring a full deployment.</p>
+ */
 @RestController
 @RequestMapping("/api/metadata")
 public class MetadataController {
@@ -27,6 +33,10 @@ public class MetadataController {
         this.appCtx = appCtx;
     }
 
+    /**
+     * Validate a metadata JSON payload for syntactic correctness and required
+     * properties. Returns 200 + {valid:true} when the payload is acceptable.
+     */
     @PostMapping("/validate")
     public ResponseEntity<?> validate(@RequestBody JsonNode body) {
         try {

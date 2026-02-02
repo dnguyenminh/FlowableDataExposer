@@ -18,6 +18,15 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Background worker responsible for consuming {@code SysExposeRequest}s
+ * and rebuilding index/plain tables from the append-only case data store.
+ *
+ * <p>Design notes:
+ * - idempotent: reindex operations should be safe to run repeatedly
+ * - defensive: failures are logged and do not crash the scheduler
+ * - performance-sensitive: metadata lookups are cached (Caffeine)</p>
+ */
 @Component
 public class CaseDataWorker {
 
@@ -36,7 +45,12 @@ public class CaseDataWorker {
     @Autowired
     private SysExposeRequestRepository reqRepo;
 
-    // scheduled polling of pending requests (every second)
+    /**
+     * Scheduled poll that processes pending expose requests.
+     *
+     * Runs on a fixed delay and marks requests as DONE/FAILED; kept concise
+     * — heavy lifting is delegated to {@link #reindexByCaseInstanceId(String)}.
+     */
     @Scheduled(fixedDelay = 1000)
     public void pollAndProcess() {
         try {
@@ -60,6 +74,12 @@ public class CaseDataWorker {
     }
 
     @Transactional
+    /**
+     * Rebuild index/plain rows for a single case instance from the latest
+     * sys_case_data_store blob. This method is transactional and intended to
+     * be idempotent — callers (scheduled or admin) can safely retry on
+     * transient failures.
+     */
     public void reindexByCaseInstanceId(String caseInstanceId) {
         // find latest blob for this case
         try {

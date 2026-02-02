@@ -25,6 +25,9 @@ public class MetadataControllerTest {
     @org.springframework.boot.test.mock.mockito.MockBean
     vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository sysExposeClassDefRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    StubWorker caseDataWorker;
+
     @Test
     void validate_and_fieldCheck_endpoints_work() throws Exception {
         // mock resolver to behave like the file-backed metadata used by full-context tests
@@ -47,5 +50,20 @@ public class MetadataControllerTest {
         mvc.perform(post("/api/metadata/apply").contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.imported").value("OrderX"));
+    }
+
+    // verify reindex endpoint routes to CaseDataWorker.reindexAll when present
+    @org.springframework.boot.test.context.TestConfiguration
+    static class Cfg {
+        @org.springframework.context.annotation.Bean(name = "caseDataWorker")
+        public StubWorker caseDataWorker() { return org.mockito.Mockito.spy(new StubWorker()); }
+    }
+
+    public static class StubWorker { public void reindexAll(String s) { /* spy target */ } }
+
+    @Test
+    void reindex_endpoint_triggers_worker() throws Exception {
+        mvc.perform(post("/api/metadata/reindex/Order")).andExpect(status().isAccepted());
+        org.mockito.Mockito.verify(caseDataWorker, org.mockito.Mockito.times(1)).reindexAll("Order");
     }
 }

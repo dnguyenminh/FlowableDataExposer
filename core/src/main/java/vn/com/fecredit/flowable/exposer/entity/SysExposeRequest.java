@@ -3,6 +3,13 @@ package vn.com.fecredit.flowable.exposer.entity;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
+/**
+ * Lightweight request record created by lifecycle listeners and global
+ * event handlers to trigger asynchronous indexing/reindex operations.
+ *
+ * <p>Rows are processed by {@code CaseDataWorker} and treated as
+ * append-only work-items: the table acts as a durable queue for indexing.</p>
+ */
 @Entity
 @Table(name = "sys_expose_requests")
 public class SysExposeRequest {

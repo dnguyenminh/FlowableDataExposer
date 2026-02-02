@@ -20,6 +20,21 @@ import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Resolves metadata definitions for entity classes and entityTypes.
+ *
+ * <p>Runtime strategy:
+ * - prefer the latest enabled DB-backed definition (for admin overrides)
+ * - otherwise fall back to file-backed canonical definitions in
+ *   <code>src/main/resources/metadata/</code>
+ * - support inheritance (parent chain) and nested-class resolution
+ *   used by the indexer and {@code CaseDataWorker}.</p>
+ *
+ * Responsibilities:
+ * - provide merged/flattened field mappings (jsonPath + plainColumn)
+ * - cache resolved mappings (Caffeine) and expose eviction methods
+ * - remain backwards-compatible with legacy column->jsonPath mappings
+ */
 @Component
 public class MetadataResolver {
 

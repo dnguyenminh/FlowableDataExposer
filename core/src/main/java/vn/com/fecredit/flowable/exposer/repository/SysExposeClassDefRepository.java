@@ -8,6 +8,12 @@ import vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Repository for admin-managed metadata overrides (sys_expose_class_def).
+ *
+ * Provides convenience queries used by {@link vn.com.fecredit.flowable.exposer.service.MetadataResolver}
+ * to prefer DB-backed metadata when present.
+ */
 public interface SysExposeClassDefRepository extends JpaRepository<SysExposeClassDef, Long> {
 
     @Query("select s from SysExposeClassDef s where s.className = :className order by s.version desc")
