@@ -16,8 +16,14 @@ public class MetadataDefinition {
     public String _class; // 'class' is a reserved word in Java so JSON maps to _class
     public String entityType;
     public String parent;
+    /** Optional mixins (additional class defs to be merged in declared order). */
+    public java.util.List<String> mixins;
     public Integer version = 1;
     public Boolean enabled = true;
+    /** Mark this canonical file as deprecated so runtime can ignore it (migration path). */
+    public Boolean deprecated = false;
+    /** If present, indicates the module that now owns this canonical definition (e.g. "web"). */
+    public String migratedToModule;
     public String description;
     // optional class-level jsonPath (e.g. "$.customer") to allow class-scoped mappings
     public String jsonPath;
@@ -54,6 +60,13 @@ public class MetadataDefinition {
 
         // for array mappings, optional index
         public Integer arrayIndex;
+
+        // Provenance (populated by MetadataResolver when merging)
+        public String sourceClass;   // e.g. "Order", "MixinA"
+        public String sourceKind;    // "file" or "db"
+        public String sourceModule;  // e.g. "core" or "web" (optional)
+        public String sourceLocation; // optional human-friendly location (filename)
+
     }
 
     // Field-level defs for annotator

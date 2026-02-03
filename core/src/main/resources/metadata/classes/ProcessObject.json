@@ -1,0 +1,11 @@
+{
+  "class": "ProcessObject",
+  "parent": "FlowableObject",
+  "description": "Process-instance (BPMN) canonical fields (inherits audit from FlowableObject)",
+  "jsonPath": "$",
+  "fields": [
+    { "name": "processInstanceId", "jsonPath": "$.processInstanceId", "type": "string" },
+    { "name": "processDefinitionId", "jsonPath": "$.processDefinitionId", "type": "string" },
+    { "name": "parentInstanceId", "jsonPath": "$.parentInstanceId", "type": "string" }
+  ]
+}

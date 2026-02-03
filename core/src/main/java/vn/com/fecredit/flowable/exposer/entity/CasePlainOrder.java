@@ -46,6 +46,9 @@ public class CasePlainOrder {
     @Column(name = "decision_reason")
     private String decisionReason;
 
+    @Column(name = "requested_by")
+    private String requestedBy;
+
     @Lob
     @Column(name = "plain_payload", columnDefinition = "CLOB")
     private String plainPayload;
@@ -122,6 +125,11 @@ public class CasePlainOrder {
     public String getDecisionReason() { return decisionReason; }
     /** Set decision reason. */
     public void setDecisionReason(String decisionReason) { this.decisionReason = decisionReason; }
+
+    /** Who requested/started the case (Flowable startUserId) if available. */
+    public String getRequestedBy() { return requestedBy; }
+    /** Set who requested/started the case. */
+    public void setRequestedBy(String requestedBy) { this.requestedBy = requestedBy; }
 
     /**
      * JSON snapshot of the exported fields (CLOB). Kept for diagnostics and

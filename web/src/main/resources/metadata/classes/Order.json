@@ -1,5 +1,6 @@
 {
   "class": "Order",
+  "parent": "WorkObject",
   "entityType": "Order",
   "version": 1,
   "enabled": true,

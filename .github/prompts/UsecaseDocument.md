@@ -10,51 +10,50 @@ Giải pháp: Lưu trữ toàn bộ trạng thái Case vào một Case Data Stor
 UC 01: Lưu trữ Case Data vĩnh viễn (The Source of Truth)
 Actor: Flowable Engine (System).
 
-Mô tả: Khi bất kỳ Task nào trong Case (CMMN) hoặc Process (BPMN) hoàn thành, toàn bộ biến (variableMap) phải được chụp ảnh (Snapshot).
+Mô tả: Khi bất kỳ Task nào trong Case (CMMN) hoặc Process (BPMN) hoàn thành, toàn bộ biến (variableMap) phải được chụp ảnh (Snapshot). Snapshots must include the canonical FlowableObject fields (createTime, startUserId, tenantId, etc.) so that parent-class audit columns can be populated in Index Tables.
 
 Luồng xử lý:
 
-Interceptor bắt sự kiện commit của Flowable.
-
-Xác định Class nghiệp vụ (ví dụ: com.bank.CreditCardApplication).
-
-Sinh DataKey ngẫu nhiên, mã hóa JSON Payload bằng AES-256-GCM.
-
-Mã hóa DataKey bằng MasterKey (Envelope Encryption).
-
-Lưu bản ghi vào bảng sys_case_data_store (Vĩnh viễn).
+1. Interceptor bắt sự kiện commit của Flowable.
+2. CasePersistDelegate sẽ best-effort bổ sung các thuộc tính Flowable (createTime, startUserId, processDefinitionId, businessKey, tenantId) từ execution/engine vào variableMap trước khi persist.
+3. Sinh DataKey ngẫu nhiên, mã hóa JSON Payload bằng AES-256-GCM.
+4. Mã hóa DataKey bằng MasterKey (Envelope Encryption).
+5. Lưu bản ghi vào bảng sys_case_data_store (Vĩnh viễn). Bảng này là immutable.
 
 UC 02: Trích xuất thuộc tính động (Property Exposure)
 Actor: Async Indexer Worker (System).
 
-Mô tả: Sau khi dữ liệu gốc được lưu, hệ thống tự động cập nhật bảng Index để phục vụ báo cáo.
+Mô tả: Sau khi dữ liệu gốc được lưu, hệ thống tự động cập nhật bảng Index để phục vụ báo cáo. Indexing must also expose parent-class audit fields (CREATED_AT, UPDATED_BY, TENANT_ID) to support cross-cutting reports.
 
 Luồng xử lý:
 
-Worker sử dụng Virtual Threads để giải mã Blob từ sys_case_data_store.
+1. Worker sử dụng Virtual Threads để giải mã Blob từ sys_case_data_store.
+2. Truy vấn Metadata Mapping — **quy tắc precedence rõ ràng** (child/mixins/parent) và phải có diagnostics:
+   - **Precedence:** child (class) > mixins (theo thứ tự khai báo — mixin cuối cùng thắng) > parent chain (near → far).
+   - **Remove:** `remove:true` tuân theo cùng quy tắc; một cấp cao hơn vẫn có thể tái‑khai báo cột đã bị xoá.
+   - **Type conflicts:** nếu cùng `plainColumn` có kiểu khác nhau, resolver phải báo diagnostic; CI strict mode nên fail.
+   - **Cycles:** vòng lặp trong `parent`/`mixins` phải bị phát hiện và báo lỗi; resolver không đệ quy vô hạn.
+   - **Provenance:** mỗi FieldMapping resolved phải kèm sourceClass + sourceKind(file|db) + sourceModule.
+3. Sử dụng JsonPath để trích xuất:
+   - Field đơn ($.amount)
+   - Array/List theo index ($.approvers[0].name)
+   - Map theo key ($.meta['priority'])
+   - Parent audit fields: $.createTime, $.startUserId, $.tenantId (fallbacks from DB created_at/requested_by)
+4. Thực hiện lệnh UPSERT vào bảng Index tương ứng (ví dụ: idx_credit_card_report).
 
-Truy vấn Metadata Mapping (bao gồm cả kế thừa từ lớp cha).
-
-Sử dụng JsonPath để trích xuất:
-
-Field đơn ($.amount).
-
-Array/List theo index ($.approvers[0].name).
-
-Map theo key ($.meta['priority']).
-
-Thực hiện lệnh UPSERT vào bảng Index tương ứng (ví dụ: idx_credit_card_report).
-
-UC 03: Định nghĩa Mapping & Kế thừa (Metadata Management)
+UC 03: Định nghĩa Mapping, Kế thừa và Mixins (Metadata Management)
 Actor: AI/Java Developer hoặc Business Analyst (BA).
 
-Mô tả: Cấu hình cách dữ liệu được trích xuất từ Blob ra bảng Index qua giao diện UI.
+Mô tả: Cấu hình cách dữ liệu được trích xuất từ Blob ra bảng Index qua giao diện UI. Metadata must be deterministic, auditable and safe.
 
-Quy tắc nghiệp vụ:
+Quy tắc nghiệp vụ (ngắn gọn):
+- **Khai báo mixins:** cho phép tái sử dụng mapping (mixins áp dụng theo thứ tự khai báo; mixin sau cùng thắng khi có xung đột).
+- **Kế thừa:** child tự động kế thừa mappings của parent; nearest parent overrides distant parent.
+- **Ghi đè / remove:** child có thể override hoặc remove; precedence rule xác định kết quả cuối cùng.
 
-Inheritance: Nếu VIPLoan kế thừa BaseLoan, khi trích xuất VIPLoan, hệ thống phải tự động lấy cả các mapping của BaseLoan.
+Yêu cầu kiểm thử (bắt buộc): unit tests cho precedence, mixin order, remove semantics, type conflict detection; 1 E2E test (blob → CaseDataWorker → case_plain_*).
 
-Override: Nếu lớp con định nghĩa lại cùng một column_name, giá trị của lớp con sẽ đè lên lớp cha.
+
 
 UC 04: Tái cấu trúc báo cáo (Re-indexing)
 Actor: Admin/Business Analyst.

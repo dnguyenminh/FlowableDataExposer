@@ -1,9 +1,0 @@
-{
-  "class": "com.example.Base",
-  "entityType": "Base",
-  "version": 1,
-  "mappings": [
-    { "column": "a", "jsonPath": "$.a", "type": "string" },
-    { "column": "b", "jsonPath": "$.b", "type": "string" }
-  ]
-}

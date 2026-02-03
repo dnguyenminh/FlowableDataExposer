@@ -1,6 +1,7 @@
 package vn.com.fecredit.flowable.exposer;
 
 import org.awaitility.Awaitility;
+import org.flowable.engine.ProcessEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,16 +36,13 @@ public class OrdersE2eIT {
     @Autowired
     org.springframework.context.ApplicationContext ctx;
 
+    @Autowired
+    ProcessEngine processEngine;
+
     @BeforeEach
     void ensureTestSchema() {
+        // The sys_case_data_store table is now managed by JPA/Hibernate via the SysCaseDataStore entity.
         // H2-friendly DDL (some H2 versions reject 'GENERATED ALWAYS AS IDENTITY' in this context)
-        jdbc.execute("CREATE TABLE IF NOT EXISTS sys_case_data_store (" +
-                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
-                "case_instance_id VARCHAR(255) NOT NULL, " +
-                "entity_type VARCHAR(255), " +
-                "payload CLOB, " +
-                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-        );
 
         // ensure the plain table exists for the worker to upsert (migration also defines this table in repo)
         jdbc.execute("CREATE TABLE IF NOT EXISTS case_plain_order (" +
@@ -169,6 +167,55 @@ public class OrdersE2eIT {
                  });
     }
 
+    @Test
+    void testListenerAndWorkerAutomaticProcessing() {
+        // Start case
+        String caseInstanceId = startOrderCase(null);
+
+        // Wait for the persisted blob to appear
+        Awaitility.await().atMost(Duration.ofSeconds(10)).pollInterval(Duration.ofMillis(200))
+                .until(() -> {
+                    try {
+                        Integer cnt = jdbc.queryForObject("SELECT count(*) FROM sys_case_data_store WHERE case_instance_id = ?", Integer.class, caseInstanceId);
+                        return cnt != null && cnt > 0;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+
+        // Now do NOT call reindex or invoke the worker manually. The GlobalFlowableEventListener should create a
+        // sys_expose_requests row and the scheduled CaseDataWorker should process it automatically.
+
+        // Wait for commit/request row created by listener (allow longer for async scheduling)
+        try {
+            Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200))
+                    .until(() -> {
+                        try {
+                            Integer cnt = jdbc.queryForObject("SELECT count(*) FROM sys_expose_requests WHERE case_instance_id = ?", Integer.class, caseInstanceId);
+                            return cnt != null && cnt > 0;
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    });
+        } catch (org.awaitility.core.ConditionTimeoutException cte) {
+            // Diagnostic output: print any expose requests rows for case (helps triage listener registration issues)
+            try {
+                var rows = jdbc.queryForList("SELECT * FROM sys_expose_requests WHERE case_instance_id = ?", caseInstanceId);
+                System.err.println("DIAGNOSTIC: sys_expose_requests rows for case " + caseInstanceId + " -> " + rows);
+            } catch (Exception e) {
+                System.err.println("DIAGNOSTIC: failed to query sys_expose_requests: " + e.getMessage());
+            }
+            throw cte;
+        }
+
+        // Finally wait for the plain data to be available via API (worker should upsert)
+        Awaitility.await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(300))
+                .untilAsserted(() -> {
+                    Map<String, Object> plain = getCaseVariables(caseInstanceId);
+                    assertThat(plain).containsEntry("orderTotal", 1234.56);
+                });
+    }
+
     String startOrderCase(Object payload) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -198,11 +245,5 @@ public class OrdersE2eIT {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
 
         return response.getBody();
-    }
-
-    String extractCaseInstanceId(String responseBody) {
-        Pattern pattern = Pattern.compile("\"caseInstanceId\":\"([^\"]+)\"");
-        Matcher matcher = pattern.matcher(responseBody);
-        return matcher.find() ? matcher.group(1) : null;
     }
 }

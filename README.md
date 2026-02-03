@@ -21,9 +21,11 @@ Quick start (developer)
 
 Important developer notes
 - Java 21, Spring Boot 3.2.x, Flowable 7.2.x
-- Metadata files: `src/main/resources/metadata/*.json` (see `Order.json`)
+- Metadata files: `src/main/resources/metadata/*.json` (see `Order.json`).
+  - Important: metadata resolution is **deterministic** — precedence is **child > mixins (declared order, last wins) > parent chain**. The resolver attaches provenance to every resolved field so BA/Dev can trace origin.
+  - You can request `exportToPlain:true` + `plainColumn` in metadata; the framework can generate idempotent DDL (developer convenience) and a vetted migration SQL + backfill/reindex plan for DBAs.
 - Models: `src/main/resources/processes/*.bpmn`, `src/main/resources/cases/*.cmmn`, `src/main/resources/decisions/*.dmn`
-- Reindex / migration: see `migrations/` and `CaseDataWorkerTest` for acceptance examples
+- Reindex / migration: see `migrations/`, `MetadataDdlGenerator`, and `CaseDataWorkerTest` for examples — production schema changes must go through DB migrations (framework generates SQL + reindex plan for review).
 
 Tests of interest
 - E2E reindex & encryption: `CaseDataWorkerTest`

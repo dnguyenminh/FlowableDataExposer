@@ -26,6 +26,23 @@ ExposeMapping: Maps JsonPath to Index Table columns.
 
 Inheritance Resolver: Automatically gathers all mappings from the class hierarchy.
 
+C. Canonical Flowable-derived class hierarchy (defaults)
+- FlowableObject (ancestor): canonical audit /identification fields that MUST be present in snapshots: `className`, `createTime`, `startUserId`, `lastUpdated`, `lastUpdateUserId`, `tenantId`.
+- WorkObject (extends FlowableObject): case-oriented fields: `caseInstanceId`, `businessKey`, `state`.
+- ProcessObject (extends FlowableObject): process-oriented fields: `processInstanceId`, `processDefinitionId`, `parentInstanceId`.
+- DataObject (extends FlowableObject): reusable nested/data DTOs.
+
+Design implication: the CasePersistDelegate MUST best‑effort populate FlowableObject audit fields into the persisted snapshot (from execution or available variables). Metadata resolution must be **deterministic, auditable and safe**:
+
+- Precedence rule (must be implemented and unit‑tested): **child > mixins (in declared order, last wins) > parent chain (nearest parent wins)**.  
+- `remove:true` follows the same precedence rules (higher‑precedence definitions can reintroduce removed columns).  
+- Resolver must attach provenance (sourceClass, sourceKind=file|db, sourceModule) for every resolved FieldMapping so UI/BA can trace why a column was produced.  
+- Resolver must detect and report: circular parent/mixin graphs, `plainColumn` type conflicts, and missing canonical parent fields (FlowableObject).  
+
+Operational requirements:
+- Add unit tests for precedence, mixin ordering, remove semantics, type conflicts and cycle detection.  
+- Add a CI lint that fails on cycles or incompatible plainColumn types and surfaces provenance in the build report.
+
 C. Dynamic Extract & Index Engine (The "Property Exposure")
 Trigger: Upon saving to the Case Data Store, an asynchronous worker (using Virtual Threads) extracts data.
 

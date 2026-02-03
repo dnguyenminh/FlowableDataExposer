@@ -1,5 +1,6 @@
 {
   "class": "Params",
+  "parent": "DataObject",
   "jsonPath": "$.params",
   "fields": [
     { "name": "color", "jsonPath": "$.color", "type": "string", "nullable": true }

@@ -1,5 +1,6 @@
 {
   "class": "ApprovalDecision",
+  "parent": "DataObject",
   "description": "Decision result from approval flow",
   "jsonPath": "$.approvalDecision",
   "fields": [

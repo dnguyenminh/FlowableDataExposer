@@ -1,0 +1,12 @@
+{
+  "class": "MixinA",
+  "jsonPath": "$",
+  "mappings": [
+    { "column": "shared_col", "jsonPath": "$.sharedA", "type": "string" },
+    { "column": "a1_col", "jsonPath": "$.a1", "type": "string" }
+  ],
+  "fields": [
+    { "name": "shared", "jsonPath": "$.sharedA", "type": "string" },
+    { "name": "a1", "jsonPath": "$.a1", "type": "string" }
+  ]
+}

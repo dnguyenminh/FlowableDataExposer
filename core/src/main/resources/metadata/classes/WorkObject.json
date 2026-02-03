@@ -1,0 +1,11 @@
+{
+  "class": "WorkObject",
+  "parent": "FlowableObject",
+  "description": "Case-instance (CMMN) canonical fields (inherits audit from FlowableObject)",
+  "jsonPath": "$",
+  "fields": [
+    { "name": "caseInstanceId", "jsonPath": "$.caseInstanceId", "type": "string" },
+    { "name": "businessKey", "jsonPath": "$.businessKey", "type": "string" },
+    { "name": "state", "jsonPath": "$.state", "type": "string" }
+  ]
+}

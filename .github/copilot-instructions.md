@@ -14,6 +14,10 @@ Key components & where to look (fast links):
 - canonical resources: `src/main/resources/processes/*.bpmn` and `src/main/resources/cases/*.cmmn` (keep filenames & BPMN/CMMN ids in sync with delegate keys).
 - application entry / tests: `FlowableExposerApplication`, `CaseDataWorkerTest`, `CombinedDeploymentIntegrationTest`, `ModelValidatorRendererTest`.
 - metadata & mapping: `service/MetadataResolver` (file-backed canonical defs in `src/main/resources/metadata/*.json` **and** DB table `sys_expose_class_def` for runtime/admin overrides). JsonPath examples in tests and `CaseDataWorker`.
+  - Resolution rules: **child > mixins (left→right, last wins) > parent**; `remove:true` follows the same precedence. Resolver records provenance and emits diagnostics for cycles / type conflicts.
+  - Auto-DDL & migrations: `MetadataDdlGenerator` can produce idempotent ALTER statements for dev use and generate Flyway-ready SQL + reindex plan for DBA review (production changes must be applied via migrations).
+  - Quick commands: run metadata checks `.\gradlew.bat validateMetadata`, generate migration SQL `.\gradlew.bat :tools:generateMetadataMigrations` (dev-only helper), run field-check in UI at `/admin/metadata-ui.html`.
+  - Tests to add when changing metadata: unit tests for precedence/mixins/remove, type-conflict detection and a reindex E2E that verifies newly created plain columns are populated.
 - CLI & admin actions:
   - validate metadata files: .\gradlew.bat validateMetadata  (or `scripts\validate-metadata.ps1`)
   - import metadata to DB (for admin/demo): .\gradlew.bat exportMetadataToDb  (writes to `sys_expose_class_def`)

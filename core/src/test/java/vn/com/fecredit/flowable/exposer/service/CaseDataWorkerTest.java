@@ -44,4 +44,20 @@ public class CaseDataWorkerTest {
         assertThat(p.getOrderTotal()).isEqualTo(314.15);
         assertThat(p.getOrderPriority()).isEqualTo("HIGH");
     }
+
+    @Test
+    void reindex_preserves_createdAt_and_requestedBy() throws Exception {
+        String caseId = "test-case-2";
+        String payload = "{\"@class\":\"Order\",\"total\":100.0,\"startUserId\":\"u-xyz\"}";
+        jdbc.update("INSERT INTO sys_case_data_store(case_instance_id, entity_type, payload, created_at) VALUES (?,?,?,?)", caseId, "Order", payload, java.sql.Timestamp.valueOf("2022-01-02 03:04:05"));
+
+        worker.reindexByCaseInstanceId(caseId);
+
+        var opt = plainRepo.findByCaseInstanceId(caseId);
+        assertThat(opt).isPresent();
+        var p = opt.get();
+        assertThat(p.getRequestedBy()).isEqualTo("u-xyz");
+        var expected = java.time.OffsetDateTime.of(2022,1,2,3,4,5,0, java.time.ZoneOffset.UTC);
+        assertThat(p.getCreatedAt()).isEqualTo(expected);
+    }
 }

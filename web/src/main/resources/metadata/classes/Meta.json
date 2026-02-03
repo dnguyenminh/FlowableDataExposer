@@ -1,5 +1,6 @@
 {
   "class": "Meta",
+  "parent": "DataObject",
   "description": "Metadata for the order",
   "jsonPath": "$.meta",
   "fields": [

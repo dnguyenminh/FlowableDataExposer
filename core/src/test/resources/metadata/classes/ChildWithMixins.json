@@ -1,0 +1,15 @@
+{
+  "class": "ChildWithMixins",
+  "parent": "Parent",
+  "mixins": ["MixinA", "MixinB"],
+  "jsonPath": "$",
+  "mappings": [
+    { "column": "shared_col", "jsonPath": "$.sharedChild", "type": "string" },
+    { "column": "a1_col", "remove": true },
+    { "column": "child_col", "jsonPath": "$.child", "type": "string" }
+  ],
+  "fields": [
+    { "name": "sharedChild", "jsonPath": "$.sharedChild", "type": "string" },
+    { "name": "child", "jsonPath": "$.child", "type": "string" }
+  ]
+}

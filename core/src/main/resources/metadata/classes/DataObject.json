@@ -1,0 +1,10 @@
+{
+  "class": "DataObject",
+  "parent": "FlowableObject",
+  "description": "Shared data / nested objects (inherits audit from FlowableObject)",
+  "jsonPath": "$",
+  "fields": [
+    { "name": "id", "jsonPath": "$.id", "type": "string" },
+    { "name": "type", "jsonPath": "$.type", "type": "string" }
+  ]
+}

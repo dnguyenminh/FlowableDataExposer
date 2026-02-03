@@ -1,5 +1,6 @@
 {
   "class": "OrderRules",
+  "parent": "DataObject",
   "description": "Rules/decision results produced by DMN",
   "jsonPath": "$.orderRules",
   "fields": [

@@ -7,6 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
+import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +26,8 @@ import java.util.Map;
 @Component("casePersistDelegate")
 public class CasePersistDelegate implements JavaDelegate {
 
+    private static final Logger logger = LoggerFactory.getLogger(CasePersistDelegate.class);
+
     @Autowired
     private ObjectMapper om;
 
@@ -30,6 +36,11 @@ public class CasePersistDelegate implements JavaDelegate {
 
     @Autowired
     private MetadataAnnotator annotator;
+
+    @Autowired
+    private CaseDataPersistService persistService;
+    @Autowired
+    private vn.com.fecredit.flowable.exposer.service.RequestPersistService requestPersistService;
 
     /**
      * Entry point invoked by Flowable. Kept short by delegating to helpers so
@@ -40,14 +51,34 @@ public class CasePersistDelegate implements JavaDelegate {
         String caseInstanceId = execution.getProcessInstanceId();
         Map<String, Object> vars = copyVariables(execution);
 
+        // enrich with Flowable-derived canonical fields (createTime, startUserId, businessKey, tenantId)
+        populateFlowableMetadata(execution, vars);
+
         ensureClassAnnotations(vars);
         safeAnnotate(vars);
 
         // Diagnostic: visible in test output for deterministic E2E assertions
-        System.out.println("CasePersistDelegate vars before persist: " + vars);
+        logger.debug("CasePersistDelegate vars before persist: {}", vars);
 
         String payload = stringify(vars);
-        persistPayload(caseInstanceId, "Order", payload);
+        // persist in a separate transaction so process rollbacks do not remove the blob
+        try {
+            // persist with service computing version and setting initial status
+            persistService.persistSysCaseData(caseInstanceId, "Order", payload);
+            // create a lightweight expose request so the async worker will pick this up
+                try {
+                // persist request in its own transaction so it is visible to the worker even if the process
+                // outer transaction rolls back. Best-effort: do not throw on failure.
+                logger.debug("CasePersistDelegate calling RequestPersistService.createRequest(caseInstanceId={}, entityType={})", caseInstanceId, "Order");
+                requestPersistService.createRequest(caseInstanceId, "Order", null);
+                logger.debug("CasePersistDelegate created sys_expose_request (REQUIRES_NEW) for {}", caseInstanceId);
+            } catch (Throwable t) {
+                logger.warn("CasePersistDelegate: failed to create sys_expose_request for {}: {}", caseInstanceId, t.getMessage());
+            }
+        } catch (Exception ex) {
+            // Log full stacktrace so the cause (schema, constraint, driver) is visible during debugging
+            logger.warn("Failed to persist case blob for {}:", caseInstanceId, ex);
+        }
     }
 
     /** Create a mutable, shallow copy of the execution variables. */
@@ -109,6 +140,53 @@ public class CasePersistDelegate implements JavaDelegate {
         }
     }
 
+    /**
+     * Best-effort extraction of Flowable execution metadata into the
+     * variable map so it becomes part of the persisted snapshot.
+     *
+     * This uses reflection to avoid hard coupling to specific Flowable
+     * API versions and to remain test-friendly.
+     */
+    private void populateFlowableMetadata(org.flowable.engine.delegate.DelegateExecution execution, Map<String, Object> vars) {
+        try {
+            // start time / createTime
+            try {
+                var m = execution.getClass().getMethod("getStartTime");
+                Object st = m.invoke(execution);
+                if (st != null) vars.putIfAbsent("createTime", String.valueOf(st));
+            } catch (NoSuchMethodException ignored) {}
+
+            // start user
+            try {
+                var m2 = execution.getClass().getMethod("getStartUserId");
+                Object su = m2.invoke(execution);
+                if (su != null) vars.putIfAbsent("startUserId", String.valueOf(su));
+            } catch (NoSuchMethodException ignored) {}
+
+            // business key
+            try {
+                var m3 = execution.getClass().getMethod("getBusinessKey");
+                Object bk = m3.invoke(execution);
+                if (bk != null) vars.putIfAbsent("businessKey", String.valueOf(bk));
+            } catch (NoSuchMethodException ignored) {}
+
+            // tenant id
+            try {
+                var m4 = execution.getClass().getMethod("getTenantId");
+                Object tid = m4.invoke(execution);
+                if (tid != null) vars.putIfAbsent("tenantId", String.valueOf(tid));
+            } catch (NoSuchMethodException ignored) {}
+
+            // processDefinitionId (useful for inferring entityType)
+            try {
+                var m5 = execution.getClass().getMethod("getProcessDefinitionId");
+                Object pd = m5.invoke(execution);
+                if (pd != null) vars.putIfAbsent("processDefinitionId", String.valueOf(pd));
+            } catch (NoSuchMethodException ignored) {}
+        } catch (Throwable ignored) {
+            // best-effort only
+        }
+    }
     private void putClassIfMap(Map<String, Object> vars, String key, String className) {
         Object o = vars.get(key);
         if (o instanceof Map) {

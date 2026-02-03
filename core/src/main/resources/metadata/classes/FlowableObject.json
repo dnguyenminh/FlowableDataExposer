@@ -1,0 +1,16 @@
+{
+  "class": "FlowableObject",
+  "description": "Ancestor: identification + audit-trail fields (populated by CasePersistDelegate / runtime)",
+  "jsonPath": "$",
+  "fields": [
+    { "name": "className", "jsonPath": "$.@class", "type": "string" },
+    { "name": "createTime", "jsonPath": "$.createTime", "type": "string" },
+    { "name": "startUserId", "jsonPath": "$.startUserId", "type": "string" },
+    { "name": "lastUpdated", "jsonPath": "$.lastUpdated", "type": "string" },
+    { "name": "lastUpdateUserId", "jsonPath": "$.lastUpdateUserId", "type": "string" },
+    { "name": "updateTime", "jsonPath": "$.updateTime", "type": "string" },
+    { "name": "creator", "jsonPath": "$.creator", "type": "string" },
+    { "name": "updator", "jsonPath": "$.updator", "type": "string" },
+    { "name": "tenantId", "jsonPath": "$.tenantId", "type": "string" }
+  ]
+}

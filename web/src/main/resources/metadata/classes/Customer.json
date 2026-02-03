@@ -1,5 +1,6 @@
 {
   "class": "Customer",
+  "parent": "DataObject",
   "description": "Customer nested object",
   "jsonPath": "$.customer",
   "fields": [

@@ -1,5 +1,6 @@
 {
   "class": "Item",
+  "parent": "DataObject",
   "description": "Item in order",
   "jsonPath": "$.items[*]",
   "fields": [

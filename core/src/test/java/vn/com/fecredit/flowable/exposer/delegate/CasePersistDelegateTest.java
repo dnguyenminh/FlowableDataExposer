@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
 import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
+import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -35,6 +36,9 @@ class CasePersistDelegateTest {
 
     @Mock
     private MetadataAnnotator annotator;
+
+    @Mock
+    private CaseDataPersistService persistService;
 
     @Mock
     private DelegateExecution execution;
@@ -62,7 +66,7 @@ class CasePersistDelegateTest {
         assertThat(captured).containsEntry("orderId", 12345);
         assertThat(captured).containsKey("@class");
 
-        verify(jdbc).update(org.mockito.Mockito.startsWith("INSERT INTO sys_case_data_store"), eq("case-1"), eq("Order"), eq("{\"orderId\":12345}"));
+        verify(persistService).persistSysCaseData(eq("case-1"), eq("Order"), eq("{\"orderId\":12345}"));
     }
 
     @Test
@@ -76,6 +80,34 @@ class CasePersistDelegateTest {
 
         delegate.execute(execution);
 
-        verify(jdbc).update(org.mockito.Mockito.startsWith("INSERT INTO sys_case_data_store"), org.mockito.Mockito.eq("case-2"), org.mockito.Mockito.eq("Order"), org.mockito.Mockito.contains("x=y"));
+        verify(persistService).persistSysCaseData(org.mockito.Mockito.eq("case-2"), org.mockito.Mockito.eq("Order"), org.mockito.Mockito.contains("x=y"));
+    }
+
+    @Test
+    void execute_adds_flowable_metadata_when_available() throws Exception {
+        doReturn("case-3").when(execution).getProcessInstanceId();
+
+        Map<String, Object> vars = new HashMap<>();
+        vars.put("orderId", 9);
+        doReturn(vars).when(execution).getVariables();
+
+        // stub common Flowable methods on the DelegateExecution
+        doReturn("u-100").when(execution).getStartUserId();
+        java.util.Date now = new java.util.Date();
+        try {
+            doReturn(now).when(execution).getStartTime();
+        } catch (Throwable ignored) {
+            // some Flowable test doubles may not implement getStartTime — ignore
+        }
+
+        doReturn("{\"orderId\":9}").when(om).writeValueAsString(org.mockito.Mockito.any());
+
+        delegate.execute(execution);
+
+        verify(annotator).annotate(mapCaptor.capture(), org.mockito.Mockito.eq("Order"));
+        Map captured = mapCaptor.getValue();
+        assertThat(captured).containsEntry("orderId", 9);
+        assertThat(captured).containsEntry("startUserId", "u-100");
+        assertThat(captured).containsKey("@class");
     }
 }

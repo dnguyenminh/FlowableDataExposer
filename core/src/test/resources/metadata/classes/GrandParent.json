@@ -1,0 +1,12 @@
+{
+  "class": "GrandParent",
+  "jsonPath": "$",
+  "mappings": [
+    { "column": "a_col", "jsonPath": "$.a", "type": "string" },
+    { "column": "b_col", "jsonPath": "$.b", "type": "string" }
+  ],
+  "fields": [
+    { "name": "a", "jsonPath": "$.a", "type": "string" },
+    { "name": "b", "jsonPath": "$.b", "type": "string" }
+  ]
+}

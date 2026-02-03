@@ -24,6 +24,9 @@ dependencies {
   testImplementation platform('org.junit:junit-bom:5.10.0')
   testImplementation 'org.junit.jupiter:junit-jupiter'
   testImplementation 'org.springframework.boot:spring-boot-starter-test'
+  // Ensure the JUnit Platform launcher is available at test runtime to provide
+  // `org.junit.platform.engine.OutputDirectoryCreator` for the Gradle test engine.
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
 }
 
 // Web module sources: only include the web controller package from the canonical tree
@@ -37,7 +40,9 @@ sourceSets {
     }
     resources {
       srcDirs = ['src/main/resources', '../src/main/resources']
-      include 'processes/**', 'cases/**', 'decisions/**', 'metadata/**', 'static/**'
+      // Keep the focused includes for process/case assets but ensure application properties
+      // and related config files are copied to the classpath for bootRun and tests.
+      include 'processes/**', 'cases/**', 'decisions/**', 'metadata/**', 'static/**', 'application.properties', 'application-*.properties'
     }
   }
   test {
@@ -66,4 +71,10 @@ tasks.processResources {
 
 bootJar {
   mainClass = 'vn.com.fecredit.flowable.exposer.FlowableExposerApplication'
+}
+
+// Explicitly set the BootRun main class to avoid ambiguity when multiple @SpringBootApplication
+// classes (e.g. MetadataImporterApplication) are present on the classpath.
+tasks.named('bootRun', org.springframework.boot.gradle.tasks.run.BootRun) {
+  mainClass.set('vn.com.fecredit.flowable.exposer.FlowableExposerApplication')
 }
