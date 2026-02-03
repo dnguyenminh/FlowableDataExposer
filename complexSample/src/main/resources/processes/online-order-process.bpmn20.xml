@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:flowable="http://flowable.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1994/XPath" targetNamespace="http://www.flowable.org/processdef">
+  <process id="onlineOrderProcess" name="Quy trình Bán hàng Online" isExecutable="true">
+    
+    <startEvent id="startOrder" name="Nhận đơn hàng mới" flowable:initiator="initiator" />
+
+    <sequenceFlow id="flow1" sourceRef="startOrder" targetRef="taskCalculateDiscount" />
+
+    <serviceTask id="taskCalculateDiscount" name="Tính chiết khấu &amp; Phí ship" flowable:type="dmn">
+      <extensionElements>
+        <flowable:field name="decisionTableReferenceKey">
+          <flowable:string><![CDATA[orderDiscountRules]]></flowable:string>
+        </flowable:field>
+      </extensionElements>
+    </serviceTask>
+
+    <sequenceFlow id="flow2" sourceRef="taskCalculateDiscount" targetRef="taskCheckInventory" />
+
+    <serviceTask id="taskCheckInventory" name="Kiểm tra tồn kho" flowable:expression="${inventoryService.check(orderId)}" />
+
+    <sequenceFlow id="flow3" sourceRef="taskCheckInventory" targetRef="gatewayStock" />
+
+    <exclusiveGateway id="gatewayStock" name="Còn hàng?" />
+
+    <sequenceFlow id="flowStockNo" name="Hết hàng" sourceRef="gatewayStock" targetRef="taskNotifyOutOfStock">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${!inStock}]]></conditionExpression>
+    </sequenceFlow>
+
+    <sequenceFlow id="flowStockYes" name="Còn hàng" sourceRef="gatewayStock" targetRef="taskPayment">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${inStock}]]></conditionExpression>
+    </sequenceFlow>
+
+    <serviceTask id="taskNotifyOutOfStock" name="Gửi mail hết hàng" flowable:expression="${notificationService.send(customerId)}" />
+    
+    <sequenceFlow id="flowEndStock" sourceRef="taskNotifyOutOfStock" targetRef="endNone" />
+
+    <userTask id="taskPayment" name="Khách hàng thanh toán" flowable:assignee="${initiator}" />
+
+    <sequenceFlow id="flow4" sourceRef="taskPayment" targetRef="taskPackGoods" />
+
+    <userTask id="taskPackGoods" name="Đóng gói hàng hóa" flowable:candidateGroups="warehouse" />
+
+    <sequenceFlow id="flow5" sourceRef="taskPackGoods" targetRef="taskShipping" />
+
+    <serviceTask id="taskShipping" name="Gọi đơn vị vận chuyển" flowable:expression="${shippingService.book(orderId)}" />
+
+    <sequenceFlow id="flow6" sourceRef="taskShipping" targetRef="endSuccess" />
+
+    <endEvent id="endSuccess" name="Hoàn tất đơn hàng" />
+    <endEvent id="endNone" name="Kết thúc" />
+
+  </process>
+</definitions>
