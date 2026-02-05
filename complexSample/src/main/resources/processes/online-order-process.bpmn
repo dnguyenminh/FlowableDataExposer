@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/bpmn" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" targetNamespace="http://www.flowable.org/processdef">
+  <process id="onlineOrderProcess" name="Quy trình Bán hàng Online Phức tạp" isExecutable="true">
+    
+    <startEvent id="startOrder" name="Nhận đơn" />
+    <sequenceFlow id="f1" sourceRef="startOrder" targetRef="taskDMN" />
+
+    <serviceTask id="taskDMN" name="Tính giá &amp; Phí ship" flowable:type="dmn">
+      <extensionElements>
+        <flowable:field name="decisionTableReferenceKey"><flowable:string>orderDiscountRules</flowable:string></flowable:field>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f2" sourceRef="taskDMN" targetRef="taskCheckStock" />
+
+    <serviceTask id="taskCheckStock" name="Kiểm tra tồn kho" flowable:delegateExpression="${inventoryServiceDelegate}" />
+    <sequenceFlow id="f3" sourceRef="taskCheckStock" targetRef="gwStock" />
+
+    <exclusiveGateway id="gwStock" name="Còn hàng?" />
+    <sequenceFlow id="flowOutStock" name="Hết hàng" sourceRef="gwStock" targetRef="endCancel">
+      <conditionExpression xsi:type="tFormalExpression">${!inStock}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowInStock" name="Còn hàng" sourceRef="gwStock" targetRef="taskPayment" />
+
+    <userTask id="taskPayment" name="Khách thanh toán" flowable:assignee="${initiator}" />
+    <sequenceFlow id="f4" sourceRef="taskPayment" targetRef="taskPack" />
+
+    <userTask id="taskPack" name="Đóng gói hàng" flowable:candidateGroups="warehouse" />
+    <sequenceFlow id="f5" sourceRef="taskPack" targetRef="endSuccess" />
+
+    <endEvent id="endSuccess" name="Hoàn tất" />
+    <endEvent id="endCancel" name="Hủy đơn" />
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_onlineOrderProcess">
+    <bpmndi:BPMNPlane bpmnElement="onlineOrderProcess" id="BPMNPlane_onlineOrderProcess">
+      <bpmndi:BPMNShape bpmnElement="startOrder" id="BPMNShape_startOrder"><omgdc:Bounds height="30.0" width="30.0" x="50.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="taskDMN" id="BPMNShape_taskDMN"><omgdc:Bounds height="80.0" width="100.0" x="120.0" y="135.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="taskCheckStock" id="BPMNShape_taskCheckStock"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="135.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="gwStock" id="BPMNShape_gwStock" isMarkerVisible="true"><omgdc:Bounds height="40.0" width="40.0" x="420.0" y="155.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endCancel" id="BPMNShape_endCancel"><omgdc:Bounds height="28.0" width="28.0" x="426.0" y="260.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="taskPayment" id="BPMNShape_taskPayment"><omgdc:Bounds height="80.0" width="100.0" x="510.0" y="135.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="taskPack" id="BPMNShape_taskPack"><omgdc:Bounds height="80.0" width="100.0" x="660.0" y="135.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endSuccess" id="BPMNShape_endSuccess"><omgdc:Bounds height="28.0" width="28.0" x="810.0" y="161.0"/></bpmndi:BPMNShape>
+      
+      <bpmndi:BPMNEdge bpmnElement="f1"><omgdi:waypoint x="80.0" y="175.0"/><omgdi:waypoint x="120.0" y="175.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="f2"><omgdi:waypoint x="220.0" y="175.0"/><omgdi:waypoint x="270.0" y="175.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="f3"><omgdi:waypoint x="370.0" y="175.0"/><omgdi:waypoint x="420.0" y="175.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowOutStock"><omgdi:waypoint x="440.0" y="195.0"/><omgdi:waypoint x="440.0" y="260.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowInStock"><omgdi:waypoint x="460.0" y="175.0"/><omgdi:waypoint x="510.0" y="175.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="f4"><omgdi:waypoint x="610.0" y="175.0"/><omgdi:waypoint x="660.0" y="175.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="f5"><omgdi:waypoint x="760.0" y="175.0"/><omgdi:waypoint x="810.0" y="175.0"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

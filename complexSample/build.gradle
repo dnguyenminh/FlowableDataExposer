@@ -4,7 +4,7 @@ plugins {
   id 'java'
 }
 
-group = 'vn.com.fecredit.chunkedupload'
+group = 'vn.com.fecredit.complexsample'
 version = '1.0-SNAPSHOT'
 
 java {
@@ -28,23 +28,44 @@ dependencies {
 
 sourceSets {
   main {
-    java { srcDirs = ['src/main/java'] }
-    resources { srcDirs = ['src/main/resources', '../src/main/resources'] }
+    java {
+      srcDirs = ['src/main/java']
+    }
+    resources {
+      srcDirs = ['src/main/resources', '../src/main/resources']
+      include 'processes/**', 'cases/**', 'decisions/**', 'metadata/**', 'static/**', 'application.properties', 'application-*.properties'
+    }
   }
   test {
-    java { srcDirs = ['src/test/java', '../src/test/java'] }
+    java {
+      srcDirs = ['src/test/java', '../src/test/java']
+      include 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
+              'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
+              'vn/com/fecredit/flowable/exposer/OrderControllerTest.java',
+              'vn/com/fecredit/flowable/exposer/OrdersUiTest.java',
+              'vn/com/fecredit/flowable/exposer/OrdersE2eIT.java',
+              'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
+              'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
+    }
     resources.srcDirs = ['src/test/resources', '../src/test/resources']
   }
 }
 
+// During the ongoing repo migration there may be legitimate duplicates between
+// web/src/main/resources and the canonical repo resources. Prefer the web/
+// copy and avoid failing the build on duplicates until the cleanup PR is
+// applied.
 tasks.processResources {
   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 bootJar {
-  mainClass = 'vn.com.fecredit.flowable.exposer.FlowableExposerApplication'
+  mainClass = 'vn.com.fecredit.flowable.exposer.ComplexSampleApplication'
 }
 
+// Explicitly set the BootRun main class to avoid ambiguity when multiple @SpringBootApplication
+// classes (e.g. MetadataImporterApplication) are present on the classpath.
 tasks.named('bootRun', org.springframework.boot.gradle.tasks.run.BootRun) {
-  mainClass.set('vn.com.fecredit.flowable.exposer.FlowableExposerApplication')
+  mainClass.set('vn.com.fecredit.flowable.exposer.ComplexSampleApplication')
 }
+// end of build file

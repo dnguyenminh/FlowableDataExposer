@@ -1,0 +1,10 @@
+{
+  "class": "OrderRules",
+  "parent": "DataObject",
+  "description": "Derived rules (discount/shipping)",
+  "jsonPath": "$.rules",
+  "fields": [
+    { "name": "discount", "jsonPath": "$.discount", "type": "decimal" },
+    { "name": "shippingFee", "jsonPath": "$.shippingFee", "type": "decimal" }
+  ]
+}

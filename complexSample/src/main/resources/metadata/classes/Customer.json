@@ -1,0 +1,10 @@
+{
+  "class": "Customer",
+  "parent": "DataObject",
+  "description": "Customer nested object",
+  "jsonPath": "$.customer",
+  "fields": [
+    { "name": "id", "jsonPath": "$.id", "type": "string" },
+    { "name": "name", "jsonPath": "$.name", "type": "string" }
+  ]
+}

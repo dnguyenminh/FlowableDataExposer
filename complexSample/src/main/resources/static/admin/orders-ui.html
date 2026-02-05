@@ -1,0 +1,220 @@
+<!doctype html>
+<html>
+<head>
+  <!doctype html>
+  <html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Orders — Management</title>
+    <style>
+      :root{--bg:#f4f6fb;--card:#ffffff;--primary:#0b5fff;--muted:#6b7280;--radius:12px}
+      html,body{height:100%}
+      body{margin:0;font-family:Inter,Segoe UI,Helvetica,Arial;background:var(--bg);color:#0b1220}
+      header{background:linear-gradient(90deg,#0b5fff 0%,#6b9bff 100%);color:#fff;padding:18px 28px}
+      header h1{margin:0;font-size:20px;font-weight:600}
+      .wrap{max-width:1200px;margin:24px auto;padding:0 18px}
+      .grid{display:grid;grid-template-columns:360px 1fr;gap:20px}
+      .card{background:var(--card);border-radius:var(--radius);padding:18px;box-shadow:0 8px 30px rgba(11,17,34,0.06)}
+      label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+      input[type=text],select,input[type=number],textarea{width:100%;padding:10px;border:1px solid #e6eef6;border-radius:8px;font-size:14px}
+      .btn{display:inline-flex;align-items:center;gap:8px;background:var(--primary);color:#fff;padding:10px 14px;border-radius:8px;border:none;cursor:pointer}
+      .btn.ghost{background:transparent;color:var(--primary);border:1px solid rgba(11,95,255,0.12)}
+      .small{font-size:13px;color:var(--muted)}
+      .list-controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+      .search{flex:1}
+      table{width:100%;border-collapse:collapse}
+      th,td{padding:10px;border-bottom:1px solid #f1f5f9;text-align:left}
+      tr:hover td{background:#fbfdff}
+      .badge{display:inline-block;padding:6px 8px;border-radius:999px;background:#f1f5ff;color:var(--primary);font-weight:600}
+      @media(max-width:980px){.grid{grid-template-columns:1fr}.card{padding:14px}}
+      /* modal */
+      .modal-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.5);display:none;align-items:center;justify-content:center}
+      .modal{background:var(--card);width:720px;max-width:95%;border-radius:12px;padding:18px}
+      .modal pre{background:#0f1720;color:#e6f1ff;padding:12px;border-radius:8px}
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap"><h1>Orders — Management Console</h1></div>
+    </header>
+
+    <main class="wrap">
+      <div class="grid">
+        <aside class="card">
+          <h3 style="margin-top:0">Create Order</h3>
+          <div class="small">Use the form below to create a new order. Fields are validated client-side.</div>
+          <div style="margin-top:12px">
+            <label>Start type</label>
+            <select id="type"><option value="bpmn">BPMN (orderProcess)</option><option value="cmmn">CMMN (orderCase)</option></select>
+          </div>
+
+          <div style="margin-top:12px">
+            <label>Customer ID</label>
+            <input id="customerId" type="text" placeholder="e.g. C123" />
+          </div>
+
+          <div style="margin-top:12px">
+            <label>Customer Name</label>
+            <input id="customerName" type="text" placeholder="e.g. Alice Nguyen" />
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <div style="flex:1">
+              <label>Total</label>
+              <input id="total" type="number" min="0" step="0.01" />
+            </div>
+            <div style="width:140px">
+              <label>Priority</label>
+              <select id="priority"><option>LOW</option><option>MEDIUM</option><option selected>HIGH</option></select>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <label>Notes (optional)</label>
+            <textarea id="notes" rows="3" placeholder="Additional info..."></textarea>
+          </div>
+
+          <div style="margin-top:14px;display:flex;gap:8px">
+            <button id="start" class="btn">Create Order</button>
+            <button id="clear" class="btn ghost">Clear</button>
+          </div>
+          <div id="form-error" class="small" style="color:#b02;margin-top:10px;display:none"></div>
+        </aside>
+
+        <section>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div class="list-controls">
+                <input id="search" class="search" placeholder="Search by customer id, name or status" />
+                <select id="filterPriority"><option value="">All priorities</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
+              </div>
+              <div>
+                <button id="refresh-list" class="btn ghost">Refresh</button>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Customer</th><th>Priority</th><th>Total</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody id="orders-tbody"><tr><td colspan="6" class="small">Loading…</td></tr></tbody>
+            </table>
+
+            <div style="display:flex;justify-content:flex-end;margin-top:12px"><span id="pager" class="small"></span></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="modal" class="modal-backdrop"><div class="modal"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Order Details</h3><button id="close-modal" class="btn ghost">Close</button></div><div id="modal-body" style="margin-top:12px"></div></div></div>
+
+    <script>
+      // UX: structured form -> payload, validation, list with search + pagination, modal
+      const apiBase = '/api/orders';
+      const startBtn = document.getElementById('start');
+      const clearBtn = document.getElementById('clear');
+      const formError = document.getElementById('form-error');
+      const ordersTbody = document.getElementById('orders-tbody');
+      const searchEl = document.getElementById('search');
+      const filterPriority = document.getElementById('filterPriority');
+      const pagerEl = document.getElementById('pager');
+      const modal = document.getElementById('modal');
+      const modalBody = document.getElementById('modal-body');
+
+      let ordersCache = [];
+      let page = 1, pageSize = 10;
+
+      function buildPayload(){
+        const customerId = document.getElementById('customerId').value.trim();
+        const customerName = document.getElementById('customerName').value.trim();
+        const total = parseFloat(document.getElementById('total').value || 0);
+        const priority = document.getElementById('priority').value;
+        const notes = document.getElementById('notes').value.trim();
+        const payload = { total, customer: { id: customerId || null, name: customerName || null }, meta: { priority }, notes };
+        return payload;
+      }
+
+      function validateForm(){
+        formError.style.display='none';
+        const payload = buildPayload();
+        if(!payload.customer.id){ formError.textContent = 'Customer ID is required'; formError.style.display='block'; return false }
+        if(isNaN(payload.total) || payload.total <= 0){ formError.textContent = 'Total must be a positive number'; formError.style.display='block'; return false }
+        return true;
+      }
+
+      async function startOrder(){
+        if(!validateForm()) return;
+        startBtn.disabled = true;
+        const type = document.getElementById('type').value;
+        const payload = buildPayload();
+        try{
+          const res = await fetch(apiBase + '?type=' + encodeURIComponent(type), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+          if(res.status === 201){ await fetchOrders(); clearForm(); alert('Order created') }
+          else { const j = await res.json(); alert('Create failed: ' + (j.error || JSON.stringify(j))) }
+        }catch(e){ alert('Network error: ' + e) }
+        startBtn.disabled = false;
+      }
+
+      function clearForm(){ document.getElementById('customerId').value=''; document.getElementById('customerName').value=''; document.getElementById('total').value=''; document.getElementById('notes').value=''; }
+
+      async function fetchOrders(){
+        ordersTbody.innerHTML = '<tr><td colspan="6" class="small">Loading…</td></tr>';
+        try{
+          const res = await fetch(apiBase);
+          ordersCache = await res.json();
+          page = 1; renderList();
+        }catch(e){ ordersTbody.innerHTML = '<tr><td colspan="6" class="small">Error loading</td></tr>' }
+      }
+
+      function renderList(){
+        const q = searchEl.value.trim().toLowerCase();
+        const pr = filterPriority.value;
+        let filtered = ordersCache.filter(o => {
+          if(pr && (o.orderPriority||'') !== pr) return false;
+          if(!q) return true;
+          return (o.caseInstanceId||'').toLowerCase().includes(q) || (o.customerName||'').toLowerCase().includes(q) || (o.customerId||'').toLowerCase().includes(q) || (o.approvalStatus||'').toLowerCase().includes(q);
+        });
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+        if(page > totalPages) page = totalPages;
+        const start = (page-1)*pageSize; const pageItems = filtered.slice(start, start+pageSize);
+        if(pageItems.length===0) ordersTbody.innerHTML = '<tr><td colspan="6" class="small">No orders</td></tr>';
+        else{
+          ordersTbody.innerHTML = '';
+          for(const o of pageItems){
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${o.caseInstanceId||''}</td><td>${o.customerId||''} ${o.customerName?('- '+o.customerName):''}</td><td><span class="badge">${o.orderPriority||''}</span></td><td>${o.orderTotal||''}</td><td>${o.approvalStatus||''}</td><td><button data-id="${o.caseInstanceId||''}" class="btn ghost">View</button></td>`;
+            tr.querySelector('button')?.addEventListener('click', ()=>showDetail(o.caseInstanceId));
+            ordersTbody.appendChild(tr);
+          }
+        }
+        pagerEl.textContent = `Page ${page} of ${totalPages} — ${filtered.length} items`;
+        // pager controls could be added here
+      }
+
+      async function showDetail(id){
+        modal.style.display = 'flex';
+        modalBody.innerHTML = '<div class="small">Loading...</div>';
+        try{
+          const res = await fetch(apiBase + '/' + encodeURIComponent(id));
+          if(res.status===404){ modalBody.innerHTML = '<div class="small">Not found</div>'; return }
+          const j = await res.json();
+          modalBody.innerHTML = `<pre>${JSON.stringify(j, null, 2)}</pre><div style="margin-top:10px"><button id="reindex-btn" class="btn">Reindex</button></div>`;
+          document.getElementById('reindex-btn').addEventListener('click', async ()=>{
+            await fetch(apiBase + '/' + encodeURIComponent(id) + '/reindex', {method:'POST'}); alert('Reindex triggered');
+          });
+        }catch(e){ modalBody.innerHTML = '<div class="small">Error</div>' }
+      }
+
+      document.getElementById('close-modal').addEventListener('click', ()=>{ modal.style.display='none' });
+      document.getElementById('refresh-list').addEventListener('click', fetchOrders);
+      startBtn.addEventListener('click', startOrder);
+      clearBtn.addEventListener('click', clearForm);
+      searchEl.addEventListener('input', ()=>{ page=1; renderList() });
+      filterPriority.addEventListener('change', ()=>{ page=1; renderList() });
+
+      // initial load
+      fetchOrders();
+    </script>
+  </body>
+  </html>

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/cmmn" xmlns:cmmndi="http://www.omg.org/spec/CMMN/20151109/CMMNDI" xmlns:dc="http://www.omg.org/spec/CMMN/20151109/DC" xmlns:di="http://www.omg.org/spec/CMMN/20151109/DI" xmlns:design="http://flowable.org/design" targetNamespace="http://flowable.org/cmmn" design:palette="flowable-work-case-palette">
+    <case id="orderLifeCycleCase" name="Quản lý Vòng đời Đơn hàng" flowable:initiatorVariableName="initiator">
+        <casePlanModel id="casePlanModel_1" name="Order Lifecycle">
+            <extensionElements>
+                <design:stencilid><![CDATA[ExpandedStage]]></design:stencilid>
+            </extensionElements>
+            <planItem id="planItemstageProcessing" name="Giai đoạn Xử lý đơn" definitionRef="stageProcessing">
+                <exitCriterion id="exitQuickCancel" sentryRef="sentryexitQuickCancel"></exitCriterion>
+            </planItem>
+            <planItem id="planItemeventListenerCancel" name="Hủy đơn nhanh" definitionRef="eventListenerCancel"></planItem>
+            <planItem id="planItemmilestoneShipped" name="Đã giao hàng thành công" definitionRef="milestoneShipped">
+                <entryCriterion id="entryMilestone" sentryRef="sentryentryMilestone"></entryCriterion>
+            </planItem>
+            <planItem id="planItemstageAfterSales" name="Giai đoạn Hậu mãi" definitionRef="stageAfterSales">
+                <entryCriterion id="entryAfterSales" sentryRef="sentryentryAfterSales"></entryCriterion>
+            </planItem>
+            <sentry id="sentryexitQuickCancel">
+                <extensionElements>
+                    <design:stencilid><![CDATA[ExitCriterion]]></design:stencilid>
+                </extensionElements>
+                <planItemOnPart id="sentryOnPartexitQuickCancel" sourceRef="planItemeventListenerCancel">
+                    <standardEvent>occur</standardEvent>
+                </planItemOnPart>
+                <ifPart id="sentryIfPart_exitQuickCancel">
+                    <condition><![CDATA[${isPaid == true && isShipped == false}]]></condition>
+                </ifPart>
+            </sentry>
+            <sentry id="sentryentryMilestone">
+                <extensionElements>
+                    <design:stencilid><![CDATA[EntryCriterion]]></design:stencilid>
+                </extensionElements>
+                <planItemOnPart id="sentryOnPartentryMilestone" sourceRef="planItemstageProcessing">
+                    <standardEvent>complete</standardEvent>
+                </planItemOnPart>
+            </sentry>
+            <sentry id="sentryentryAfterSales">
+                <extensionElements>
+                    <design:stencilid><![CDATA[EntryCriterion]]></design:stencilid>
+                </extensionElements>
+                <planItemOnPart id="sentryOnPartentryAfterSales" sourceRef="planItemmilestoneShipped">
+                    <standardEvent>occur</standardEvent>
+                </planItemOnPart>
+            </sentry>
+            <stage id="stageProcessing" name="Giai đoạn Xử lý đơn">
+                <extensionElements>
+                    <design:stencilid><![CDATA[ExpandedStage]]></design:stencilid>
+                </extensionElements>
+                <planItem id="planItemprocessTaskOrder" name="BPMN Xử lý đơn" definitionRef="processTaskOrder"></planItem>
+                <processTask id="processTaskOrder" name="BPMN Xử lý đơn">
+                    <extensionElements>
+                        <design:stencilid><![CDATA[ProcessTask]]></design:stencilid>
+                        <design:stencilsuperid><![CDATA[Task]]></design:stencilsuperid>
+                    </extensionElements>
+                    <processRefExpression><![CDATA[onlineOrderProcess]]></processRefExpression>
+                </processTask>
+            </stage>
+            <userEventListener id="eventListenerCancel" name="Hủy đơn nhanh">
+                <extensionElements>
+                    <design:stencilid><![CDATA[UserEventListener]]></design:stencilid>
+                    <design:stencilsuperid><![CDATA[EventListener]]></design:stencilsuperid>
+                </extensionElements>
+            </userEventListener>
+            <milestone id="milestoneShipped" name="Đã giao hàng thành công">
+                <extensionElements>
+                    <design:stencilid><![CDATA[Milestone]]></design:stencilid>
+                </extensionElements>
+            </milestone>
+            <stage id="stageAfterSales" name="Giai đoạn Hậu mãi">
+                <extensionElements>
+                    <design:stencilid><![CDATA[ExpandedStage]]></design:stencilid>
+                </extensionElements>
+                <planItem id="planItemeventListenerReturn" name="Yêu cầu trả hàng" definitionRef="eventListenerReturn"></planItem>
+                <planItem id="planItemhumanTaskReturn" name="Thẩm định trả hàng" definitionRef="humanTaskReturn">
+                    <entryCriterion id="entryReturn" sentryRef="sentryentryReturn"></entryCriterion>
+                </planItem>
+                <sentry id="sentryentryReturn">
+                    <extensionElements>
+                        <design:stencilid><![CDATA[EntryCriterion]]></design:stencilid>
+                    </extensionElements>
+                    <planItemOnPart id="sentryOnPartentryReturn" sourceRef="planItemeventListenerReturn">
+                        <standardEvent>occur</standardEvent>
+                    </planItemOnPart>
+                </sentry>
+                <userEventListener id="eventListenerReturn" name="Yêu cầu trả hàng">
+                    <extensionElements>
+                        <design:stencilid><![CDATA[UserEventListener]]></design:stencilid>
+                        <design:stencilsuperid><![CDATA[EventListener]]></design:stencilsuperid>
+                    </extensionElements>
+                </userEventListener>
+                <humanTask id="humanTaskReturn" name="Thẩm định trả hàng" flowable:candidateGroups="cskh">
+                    <extensionElements>
+                        <design:stencilid><![CDATA[HumanTask]]></design:stencilid>
+                        <design:stencilsuperid><![CDATA[Task]]></design:stencilsuperid>
+                    </extensionElements>
+                </humanTask>
+            </stage>
+        </casePlanModel>
+    </case>
+    <cmmndi:CMMNDI>
+        <cmmndi:CMMNDiagram id="CMMNDiagram_orderLifeCycleCase">
+            <cmmndi:CMMNShape id="CMMNShape_casePlanModel_1" cmmnElementRef="casePlanModel_1">
+                <dc:Bounds height="550.0" width="900.0" x="20.0" y="20.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_planItemstageProcessing" cmmnElementRef="planItemstageProcessing">
+                <dc:Bounds height="160.0" width="220.0" x="60.0" y="80.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_exitQuickCancel" cmmnElementRef="exitQuickCancel">
+                <dc:Bounds height="28.0" width="18.0" x="271.0" y="146.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_planItemprocessTaskOrder" cmmnElementRef="planItemprocessTaskOrder">
+                <dc:Bounds height="80.0" width="100.0" x="120.0" y="120.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_planItemeventListenerCancel" cmmnElementRef="planItemeventListenerCancel">
+                <dc:Bounds height="30.0" width="30.0" x="350.0" y="145.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_planItemmilestoneShipped" cmmnElementRef="planItemmilestoneShipped">
+                <dc:Bounds height="54.0" width="170.0" x="380.0" y="400.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_entryMilestone" cmmnElementRef="entryMilestone">
+                <dc:Bounds height="28.0" width="18.0" x="371.0" y="413.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_planItemstageAfterSales" cmmnElementRef="planItemstageAfterSales">
+                <dc:Bounds height="200.0" width="300.0" x="580.0" y="80.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_entryAfterSales" cmmnElementRef="entryAfterSales">
+                <dc:Bounds height="28.0" width="18.0" x="571.0" y="146.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_planItemeventListenerReturn" cmmnElementRef="planItemeventListenerReturn">
+                <dc:Bounds height="30.0" width="30.0" x="620.0" y="150.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_planItemhumanTaskReturn" cmmnElementRef="planItemhumanTaskReturn">
+                <dc:Bounds height="80.0" width="100.0" x="720.0" y="140.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNShape id="CMMNShape_entryReturn" cmmnElementRef="entryReturn">
+                <dc:Bounds height="28.0" width="18.0" x="711.0" y="166.0"></dc:Bounds>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNShape>
+            <cmmndi:CMMNEdge id="CMMNEdge_EDGE_cancel" cmmnElementRef="planItemeventListenerCancel" targetCMMNElementRef="exitQuickCancel">
+                <di:extension>
+                    <flowable:docker type="source" x="15.0" y="15.0"></flowable:docker>
+                    <flowable:docker type="target" x="18.0" y="14.0"></flowable:docker>
+                </di:extension>
+                <di:waypoint x="349.9999993847391" y="160.0"></di:waypoint>
+                <di:waypoint x="289.0" y="160.0"></di:waypoint>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNEdge>
+            <cmmndi:CMMNEdge id="CMMNEdge_EDGE_returnTrigger" cmmnElementRef="planItemeventListenerReturn" targetCMMNElementRef="entryReturn">
+                <di:extension>
+                    <flowable:docker type="source" x="15.0" y="15.0"></flowable:docker>
+                    <flowable:docker type="target" x="9.0" y="14.0"></flowable:docker>
+                </di:extension>
+                <di:waypoint x="649.7237546067935" y="167.5985237891892"></di:waypoint>
+                <di:waypoint x="711.8954869358669" y="178.57358490566037"></di:waypoint>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNEdge>
+            <cmmndi:CMMNEdge id="CMMNEdge_EDGE_toMilestone" cmmnElementRef="planItemstageProcessing" targetCMMNElementRef="entryMilestone">
+                <di:extension>
+                    <flowable:docker type="source" x="110.0" y="80.0"></flowable:docker>
+                    <flowable:docker type="target" x="9.0" y="0.0"></flowable:docker>
+                </di:extension>
+                <di:waypoint x="170.0" y="239.95"></di:waypoint>
+                <di:waypoint x="170.0" y="413.0"></di:waypoint>
+                <di:waypoint x="379.9678697107179" y="413.0"></di:waypoint>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNEdge>
+            <cmmndi:CMMNEdge id="CMMNEdge_EDGE_toAfterSales" cmmnElementRef="planItemmilestoneShipped" targetCMMNElementRef="entryAfterSales">
+                <di:extension>
+                    <flowable:docker type="source" x="85.0" y="27.0"></flowable:docker>
+                    <flowable:docker type="target" x="9.0" y="14.0"></flowable:docker>
+                </di:extension>
+                <di:waypoint x="465.0" y="400.0"></di:waypoint>
+                <di:waypoint x="465.0" y="160.0"></di:waypoint>
+                <di:waypoint x="571.0" y="160.0"></di:waypoint>
+                <cmmndi:CMMNLabel></cmmndi:CMMNLabel>
+            </cmmndi:CMMNEdge>
+        </cmmndi:CMMNDiagram>
+    </cmmndi:CMMNDI>
+</definitions>

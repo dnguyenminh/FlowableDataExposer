@@ -1,0 +1,9 @@
+{
+  "class": "Params",
+  "parent": "DataObject",
+  "description": "Aux parameters",
+  "jsonPath": "$.params",
+  "fields": [
+    { "name": "color", "jsonPath": "$.color", "type": "string" }
+  ]
+}
