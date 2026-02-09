@@ -1,0 +1,66 @@
+2026-02-07T10:17:12.818+07:00  INFO 27512 --- [           main] v.c.f.f.e.ComplexSampleApplication       : Starting ComplexSampleApplication v1.0-SNAPSHOT using Java 21.0.6 with PID 27512 (C:\DDrive\projects\java\FlowableDataExposer\complexSample\build\libs\complexSample-1.0-SNAPSHOT.jar started by nguyenminhduc3 in C:\DDrive\projects\java\FlowableDataExposer)
+2026-02-07T10:17:12.833+07:00  INFO 27512 --- [           main] v.c.f.f.e.ComplexSampleApplication       : No active profile set, falling back to 1 default profile: "default"
+2026-02-07T10:17:16.075+07:00  INFO 27512 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-02-07T10:17:16.281+07:00  INFO 27512 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 172 ms. Found 3 JPA repository interfaces.
+2026-02-07T10:17:17.870+07:00  INFO 27512 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-02-07T10:17:17.909+07:00  INFO 27512 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-02-07T10:17:17.910+07:00  INFO 27512 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.24]
+2026-02-07T10:17:18.034+07:00  INFO 27512 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-02-07T10:17:18.037+07:00  INFO 27512 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 4981 ms
+2026-02-07T10:17:18.134+07:00  INFO 27512 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-02-07T10:17:20.329+07:00  INFO 27512 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn1: url=jdbc:h2:file:./build/h2/complexSample user=SA
+2026-02-07T10:17:20.337+07:00  INFO 27512 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-02-07T10:17:20.376+07:00  INFO 27512 --- [           main] o.s.b.a.h2.H2ConsoleAutoConfiguration    : H2 console available at '/h2-console'. Database available at 'jdbc:h2:file:./build/h2/complexSample'
+2026-02-07T10:17:21.131+07:00  INFO 27512 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-02-07T10:17:21.487+07:00  INFO 27512 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.4.8.Final
+2026-02-07T10:17:21.629+07:00  INFO 27512 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-02-07T10:17:22.638+07:00  INFO 27512 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-02-07T10:17:22.848+07:00  WARN 27512 --- [           main] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-02-07T10:17:25.095+07:00  INFO 27512 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-02-07T10:17:25.185+07:00  INFO 27512 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-02-07T10:17:25.667+07:00  INFO 27512 --- [           main] o.f.c.e.i.a.DefaultAsyncTaskExecutor     : Creating thread pool queue of size 100
+2026-02-07T10:17:25.669+07:00  INFO 27512 --- [           main] o.f.c.e.i.a.DefaultAsyncTaskExecutor     : Creating thread factory with naming pattern flowable-async-task-invoker-%d
+2026-02-07T10:17:25.672+07:00  INFO 27512 --- [           main] o.f.c.e.i.a.DefaultAsyncTaskExecutor     : Creating executor service with corePoolSize 8, maxPoolSize 8 and keepAliveTime 5000
+2026-02-07T10:17:26.276+07:00  INFO 27512 --- [           main] o.f.s.b.dmn.DmnEngineAutoConfiguration   : No deployment resources were found for autodeployment
+2026-02-07T10:17:26.377+07:00  INFO 27512 --- [           main] o.f.s.b.e.EventRegistryAutoConfiguration : No deployment resources were found for autodeployment
+2026-02-07T10:17:26.483+07:00  INFO 27512 --- [           main] o.f.s.b.app.AppEngineAutoConfiguration   : No deployment resources were found for autodeployment
+2026-02-07T10:17:26.510+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Found 5 Engine Configurators in total:
+2026-02-07T10:17:26.511+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : class org.flowable.engine.spring.configurator.SpringProcessEngineConfigurator (priority:50000)
+2026-02-07T10:17:26.511+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : class org.flowable.eventregistry.spring.configurator.SpringEventRegistryConfigurator (priority:100000)
+2026-02-07T10:17:26.511+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : class org.flowable.idm.spring.configurator.SpringIdmEngineConfigurator (priority:150000)
+2026-02-07T10:17:26.512+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : class org.flowable.dmn.spring.configurator.SpringDmnEngineConfigurator (priority:200000)
+2026-02-07T10:17:26.512+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : class org.flowable.cmmn.spring.configurator.SpringCmmnEngineConfigurator (priority:500000)
+2026-02-07T10:17:26.512+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing beforeInit() of class org.flowable.engine.spring.configurator.SpringProcessEngineConfigurator (priority:50000)
+2026-02-07T10:17:26.583+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing beforeInit() of class org.flowable.eventregistry.spring.configurator.SpringEventRegistryConfigurator (priority:100000)
+2026-02-07T10:17:26.590+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing beforeInit() of class org.flowable.idm.spring.configurator.SpringIdmEngineConfigurator (priority:150000)
+2026-02-07T10:17:26.596+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing beforeInit() of class org.flowable.dmn.spring.configurator.SpringDmnEngineConfigurator (priority:200000)
+2026-02-07T10:17:26.601+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing beforeInit() of class org.flowable.cmmn.spring.configurator.SpringCmmnEngineConfigurator (priority:500000)
+2026-02-07T10:17:29.245+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing configure() of class org.flowable.engine.spring.configurator.SpringProcessEngineConfigurator (priority:50000)
+2026-02-07T10:17:29.752+07:00  INFO 27512 --- [           main] o.f.engine.impl.ProcessEngineImpl        : ProcessEngine default created
+2026-02-07T10:17:29.755+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing configure() of class org.flowable.eventregistry.spring.configurator.SpringEventRegistryConfigurator (priority:100000)
+2026-02-07T10:17:29.792+07:00  INFO 27512 --- [           main] o.f.e.impl.EventRegistryEngineImpl       : EventRegistryEngine default created
+2026-02-07T10:17:29.795+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing configure() of class org.flowable.idm.spring.configurator.SpringIdmEngineConfigurator (priority:150000)
+2026-02-07T10:17:29.814+07:00  INFO 27512 --- [           main] o.f.idm.engine.impl.IdmEngineImpl        : IdmEngine default created
+2026-02-07T10:17:29.816+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing configure() of class org.flowable.dmn.spring.configurator.SpringDmnEngineConfigurator (priority:200000)
+2026-02-07T10:17:29.848+07:00  INFO 27512 --- [           main] o.f.dmn.engine.impl.DmnEngineImpl        : DmnEngine default created
+2026-02-07T10:17:29.850+07:00  INFO 27512 --- [           main] o.f.a.s.SpringAppEngineConfiguration     : Executing configure() of class org.flowable.cmmn.spring.configurator.SpringCmmnEngineConfigurator (priority:500000)
+2026-02-07T10:17:29.997+07:00  INFO 27512 --- [           main] o.f.cmmn.engine.impl.CmmnEngineImpl      : CmmnEngine default created
+2026-02-07T10:17:30.193+07:00  INFO 27512 --- [           main] o.f.app.engine.impl.AppEngineImpl        : AppEngine default created
+2026-02-07T10:17:30.281+07:00  INFO 27512 --- [           main] o.f.e.impl.cmd.ValidateV5EntitiesCmd     : Total of v5 deployments found: 0
+2026-02-07T10:17:30.835+07:00  INFO 27512 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-02-07T10:17:32.977+07:00  WARN 27512 --- [           main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-02-07T10:17:34.935+07:00  INFO 27512 --- [           main] o.f.j.s.i.a.AbstractAsyncExecutor        : Starting up the async job executor [org.flowable.spring.job.service.SpringAsyncExecutor] for engine cmmn
+2026-02-07T10:17:35.001+07:00  INFO 27512 --- [           main] o.f.c.s.a.DefaultAutoDeploymentStrategy  : Deploying resources [URL [jar:nested:/C:/DDrive/projects/java/FlowableDataExposer/complexSample/build/libs/complexSample-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/cases/order-lifecycle-advanced.cmmn]] for engine org.flowable.cmmn.engine.impl.CmmnEngineImpl@57d1e089 deployment name hint SpringBootAutoDeployment
+2026-02-07T10:17:35.015+07:00  INFO 27512 --- [       Thread-5] o.f.j.s.i.a.ResetExpiredJobsRunnable     : starting to reset expired jobs for engine cmmn
+2026-02-07T10:17:35.032+07:00  INFO 27512 --- [       Thread-3] o.f.j.s.i.a.AcquireAsyncJobsDueRunnable  : starting to acquire async jobs due for engine cmmn
+2026-02-07T10:17:35.032+07:00  INFO 27512 --- [       Thread-4] o.f.j.s.i.a.AcquireTimerJobsRunnable     : starting to acquire async jobs due for engine cmmn
+2026-02-07T10:17:36.741+07:00  INFO 27512 --- [           main] o.f.j.s.i.a.AbstractAsyncExecutor        : Starting up the async job executor [org.flowable.spring.job.service.SpringAsyncExecutor] for engine bpmn
+2026-02-07T10:17:36.746+07:00  INFO 27512 --- [       Thread-6] o.f.j.s.i.a.AcquireAsyncJobsDueRunnable  : starting to acquire async jobs due for engine bpmn
+2026-02-07T10:17:36.747+07:00  INFO 27512 --- [           main] o.f.s.c.DefaultAutoDeploymentStrategy    : Deploying resources [URL [jar:nested:/C:/DDrive/projects/java/FlowableDataExposer/complexSample/build/libs/complexSample-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/processes/online-order-process.bpmn]] for engine org.flowable.engine.impl.ProcessEngineImpl@15c0c274 deployment name hint SpringBootAutoDeployment
+2026-02-07T10:17:36.747+07:00  INFO 27512 --- [       Thread-7] o.f.j.s.i.a.AcquireTimerJobsRunnable     : starting to acquire async jobs due for engine bpmn
+2026-02-07T10:17:36.747+07:00  INFO 27512 --- [       Thread-8] o.f.j.s.i.a.ResetExpiredJobsRunnable     : starting to reset expired jobs for engine bpmn
+2026-02-07T10:17:36.964+07:00  WARN 27512 --- [           main] o.f.engine.impl.bpmn.parser.BpmnParse    : Following warnings encountered during process validation: [Validation set: 'flowable-executable-process' | Problem: 'flowable-exclusive-gateway-seq-flow-without-conditions'] : Exclusive gateway has at least one outgoing sequence flow without a condition (which isn't the default one) - [Extra info : processDefinitionId = onlineOrderProcess | processDefinitionName = Quy trình Bán hàng Online Phức tạp |  | id = gwStock |  | activityName = Còn hàng? | ] ( line: 18, column: 55)
+
+2026-02-07T10:17:37.352+07:00  INFO 27512 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+2026-02-07T10:17:37.439+07:00  INFO 27512 --- [           main] v.c.f.f.e.ComplexSampleApplication       : Started ComplexSampleApplication in 26.636 seconds (process running for 28.37)
+2026-02-07T10:17:38.077+07:00  INFO 27512 --- [           main] v.c.f.f.exposer.config.DmnAutoDeployer   : Deployed DMN: decisions/order-discount-rules.dmn

@@ -11,12 +11,16 @@
     <casePlanModel id="casePlanModel" name="Order Case Plan" flowable:formFieldValidation="true">
       
       <planItem id="planItemOrderProcess" name="Execute Order Process" definitionRef="orderProcessTask">
-        <itemControl>
-          <extensionElements>
-            <flowable:parentCompletionCondition>true</flowable:parentCompletionCondition>
-          </extensionElements>
-        </itemControl>
-      </planItem>
+              <!-- ensure the CMMN caseInstanceId is explicitly passed into the BPMN process variables -->
+              <extensionElements>
+                <flowable:in source="caseInstanceId" target="caseInstanceId" />
+              </extensionElements>
+              <itemControl>
+                <extensionElements>
+                  <flowable:parentCompletionCondition>true</flowable:parentCompletionCondition>
+                </extensionElements>
+              </itemControl>
+            </planItem>
 
       <planItem id="planItemRefundTask" name="Manual Refund Process" definitionRef="refundUserTask">
         <entryCriterion id="entryManualRefund" sentryRef="sentryRefundTrigger" />
@@ -33,6 +37,10 @@
           <flowable:in source="total" target="total" />
           <flowable:in source="items" target="items" />
           <flowable:in source="params" target="params" />
+          <!-- ensure customer is passed into the BPMN processTask so persist delegate sees it -->
+          <flowable:in source="customer" target="customer" />
+          <!-- pass the CMMN caseInstanceId into the BPMN process so persist uses the case id, not the process id -->
+          <flowable:in source="caseInstanceId" target="caseInstanceId" />
         </extensionElements>
       </processTask>
 

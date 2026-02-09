@@ -1,0 +1,56 @@
+@startuml
+actor "Flowable Engine" as Engine
+participant "GlobalFlowableEventListener" as Listener
+participant "FlowableEvent" as Event
+participant "FlowableEntityEvent" as EntityEvent
+participant "Task (entity)" as Task
+participant "CaseDataPersistService" as CaseService
+participant "RequestPersistService" as RequestService
+participant "SysExposeRequestRepository" as Repo
+participant "SysExposeRequest" as Req
+
+Engine -> Listener : onEvent(FlowableEvent)
+Listener -> Listener : log entry & repoPresent
+alt event == null
+    Listener -> Listener : log and return
+else
+    Listener -> Listener : log event type & raw
+    alt event instanceof FlowableEntityEvent
+        Listener -> EntityEvent : cast
+        EntityEvent -> Listener : getEntity()
+        alt entity instanceof Task
+            Listener -> Task : cast to Task
+            Listener -> Listener : log task details (id, name, assignee, scopeId, scopeDefId, taskDefKey)
+            alt event.type == TASK_COMPLETED
+                Listener -> Listener : extract caseInstanceId, caseDefinitionId, assignee
+                Listener -> Listener : if caseInstanceId == null -> warn & return
+                Listener -> Listener : if !isAcceptedTaskType(task) -> skip
+                Listener -> Listener : derive entityType from caseDefinitionId
+                Listener -> Req : new SysExposeRequest(caseInstanceId, entityType, requestedBy)
+                alt CaseDataPersistService != null
+                    Listener -> CaseService : persistSysCaseData(caseInstanceId, entityType, "{}")
+                    CaseService --> Listener : success / error logged
+                end
+                alt RequestPersistService != null
+                    Listener -> RequestService : createRequest(caseInstanceId, entityType, assignee)
+                    RequestService --> Listener : success / error logged
+                else
+                    Listener -> Repo : save(Req)
+                    Repo --> Listener : saved Req (id)
+                end
+                Listener -> Listener : log success or save error
+            else
+                Listener -> Listener : trace - no expose request created
+            end
+        else
+            Listener -> Listener : trace non-task entity event
+        end
+    else
+        Listener -> Listener : trace non-entity event
+    end
+end
+note right of Listener
+  isFailOnException() -> false
+  isFireOnTransactionLifecycleEvent() -> false
+end note
+@enduml

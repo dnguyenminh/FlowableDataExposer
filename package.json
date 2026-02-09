@@ -1,0 +1,29 @@
+{
+  "name": "flowabledataexposer",
+  "version": "1.0.0",
+  "description": "Lightweight service that captures Flowable BPMN/CMMN case data, stores encrypted case blobs and builds metadata-driven relational indexes (example: `idx_order_report`, `case_plain_order`).",
+  "main": "playwright.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dnguyenminh/FlowableDataExposer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dnguyenminh/FlowableDataExposer/issues"
+  },
+  "homepage": "https://github.com/dnguyenminh/FlowableDataExposer#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "playwright": "^1.58.2"
+  }
+}

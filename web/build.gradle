@@ -32,30 +32,21 @@ dependencies {
 // Web module sources: only include the web controller package from the canonical tree
 sourceSets {
   main {
-    // web module owns its controller sources (copied into web/src). Business-process
-    // assets are kept in the canonical repo resources directory and exposed on
-    // the web module classpath for runtime & validation tasks.
     java {
       srcDirs = ['src/main/java']
     }
     resources {
       srcDirs = ['src/main/resources', '../src/main/resources']
-      // Keep the focused includes for process/case assets but ensure application properties
-      // and related config files are copied to the classpath for bootRun and tests.
       include 'processes/**', 'cases/**', 'decisions/**', 'metadata/**', 'static/**', 'application.properties', 'application-*.properties'
     }
   }
   test {
     java {
       srcDirs = ['src/test/java', '../src/test/java']
-      // include only web-focused tests that live in the canonical test tree
-      include 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
-              'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
-              'vn/com/fecredit/flowable/exposer/OrderControllerTest.java',
-              'vn/com/fecredit/flowable/exposer/OrdersUiTest.java',
-              'vn/com/fecredit/flowable/exposer/OrdersE2eIT.java',
-              'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
-              'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
+      // include only the web-focused e2e tests we added
+      include 'vn/com/fecredit/flowable/exposer/OrdersE2eIT.java',
+              'vn/com/fecredit/flowable/exposer/OrdersCmmnE2eIT.java',
+              'vn/com/fecredit/flowable/exposer/OrdersBpmnMissingFieldsE2eIT.java'
     }
     resources.srcDirs = ['src/test/resources', '../src/test/resources']
   }

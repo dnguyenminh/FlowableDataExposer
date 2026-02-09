@@ -46,16 +46,23 @@ public class CaseDataWorker {
     public void pollAndProcess() {
         try {
             List<SysExposeRequest> pending = reqRepo.findByStatus("PENDING");
+            if(pending == null || pending.isEmpty()) {
+                log.debug("CaseDataWorker.pollAndProcess - no pending requests");
+                return;
+            }
+            log.info("CaseDataWorker.pollAndProcess - found {} pending requests", pending == null ? 0 : pending.size());
             for (SysExposeRequest r : pending) {
+                log.info("CaseDataWorker.pollAndProcess - processing request id={} caseInstanceId={}", r.getId(), r.getCaseInstanceId());
                 try {
                     reindexByCaseInstanceId(r.getCaseInstanceId());
                     r.setStatus("DONE");
                     r.setProcessedAt(OffsetDateTime.now());
                     reqRepo.save(r);
+                    log.info("CaseDataWorker.pollAndProcess - processed request id={} caseInstanceId={} -> DONE", r.getId(), r.getCaseInstanceId());
                 } catch (Exception ex) {
                     r.setStatus("FAILED");
                     reqRepo.save(r);
-                    log.error("Failed to process expose request {}", r.getId(), ex);
+                    log.error("Failed to process expose request {} for case {}", r.getId(), r.getCaseInstanceId(), ex);
                 }
             }
         } catch (Exception ex) {
@@ -65,7 +72,9 @@ public class CaseDataWorker {
 
     @Transactional
     public void reindexByCaseInstanceId(String caseInstanceId) {
+        log.info("reindexByCaseInstanceId - start caseInstanceId={}", caseInstanceId);
         try {
+            log.debug("Querying latest sys_case_data_store row for caseInstanceId={}", caseInstanceId);
             var row = jdbc.queryForObject(
                     "SELECT entity_type, payload, created_at FROM sys_case_data_store WHERE case_instance_id = ? ORDER BY created_at DESC LIMIT 1",
                     new Object[]{caseInstanceId}, (rs, rowNum) -> Map.of(
@@ -73,12 +82,16 @@ public class CaseDataWorker {
                             "payload", rs.getString("payload"),
                             "createdAt", rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant()
                     ));
-            if (row == null) return;
+            if (row == null) {
+                log.info("No case data row found for {}", caseInstanceId);
+                return;
+            }
 
             String entityType = (String) row.get("entityType");
             String payload = (String) row.get("payload");
             var rowCreatedAt = row.get("createdAt");
             if (entityType == null) entityType = "Order";
+            log.info("reindexByCaseInstanceId - found entityType={} createdAt={}", entityType, rowCreatedAt);
 
             Map<String, Object> vars;
             try {
@@ -209,7 +222,14 @@ public class CaseDataWorker {
                         p.setOrderPriority(directPriorityFallback);
                     }
                 } catch (Exception ex) { log.debug("Priority fallback failed for case {}", caseInstanceId, ex); }
+
+                // Diagnostic: log prepared plain values before save
+                try {
+                    log.info("Prepared plain for case {}: orderTotal={} customerId={} priority={}", caseInstanceId, p.getOrderTotal(), p.getCustomerId(), p.getOrderPriority());
+                } catch (Exception ex) { log.debug("Failed to log prepared plain for case {}", caseInstanceId, ex); }
               }, plainRepo);
+
+            log.info("reindexByCaseInstanceId - completed for {}", caseInstanceId);
 
         } catch (Exception ex) {
             log.error("reindex error for {}", caseInstanceId, ex);

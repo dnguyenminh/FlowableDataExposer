@@ -19,19 +19,21 @@ public class RequestPersistService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void createRequest(String caseInstanceId, String entityType, String requestedBy) {
-        log.debug("RequestPersistService.createRequest - entering (caseInstanceId={}, entityType={}, requestedBy={})", caseInstanceId, entityType, requestedBy);
+        log.info("RequestPersistService.createRequest - entering (caseInstanceId={}, entityType={}, requestedBy={})", caseInstanceId, entityType, requestedBy);
         SysExposeRequest req = new SysExposeRequest();
         req.setCaseInstanceId(caseInstanceId);
         req.setEntityType(entityType);
         req.setRequestedBy(requestedBy);
-        SysExposeRequest saved = requestRepo.save(req);
-        if (log.isDebugEnabled()) {
+        try {
+            // use saveAndFlush to push the insert to the database within this REQUIRES_NEW transaction
+            SysExposeRequest saved = requestRepo.saveAndFlush(req);
             Long id = null;
-            try {
-                id = saved.getId();
-            } catch (Exception ignored) {
-            }
-            log.debug("RequestPersistService.createRequest - persisted SysExposeRequest id={} caseInstanceId={}", id, caseInstanceId);
+            try { id = saved.getId(); } catch (Exception ignored) {}
+            log.info("RequestPersistService.createRequest - persisted SysExposeRequest id={} caseInstanceId={} thread={}", id, caseInstanceId, Thread.currentThread().getName());
+        } catch (Exception e) {
+            // Log full stacktrace and rethrow so the caller (delegate) can observe/fallback as intended
+            log.error("RequestPersistService.createRequest - failed to persist SysExposeRequest for case {}: {}", caseInstanceId, e.getMessage(), e);
+            throw e;
         }
     }
 }

@@ -48,8 +48,8 @@ public class CasePersistDelegate implements JavaDelegate {
      */
     @Override
     public void execute(DelegateExecution execution) {
-        String caseInstanceId = execution.getProcessInstanceId();
         Map<String, Object> vars = copyVariables(execution);
+        String caseInstanceId = resolveCaseInstanceId(execution, vars);
 
         // enrich with Flowable-derived canonical fields (createTime, startUserId, businessKey, tenantId)
         populateFlowableMetadata(execution, vars);
@@ -58,7 +58,7 @@ public class CasePersistDelegate implements JavaDelegate {
         safeAnnotate(vars);
 
         // Diagnostic: visible in test output for deterministic E2E assertions
-        logger.debug("CasePersistDelegate vars before persist: {}", vars);
+        logger.info("CasePersistDelegate vars before persist (caseInstanceId={}): {}", caseInstanceId, vars);
 
         String payload = stringify(vars);
         // persist in a separate transaction so process rollbacks do not remove the blob
@@ -66,18 +66,56 @@ public class CasePersistDelegate implements JavaDelegate {
             // persist with service computing version and setting initial status
             persistService.persistSysCaseData(caseInstanceId, "Order", payload);
             // create a lightweight expose request so the async worker will pick this up
-                try {
+            try {
                 // persist request in its own transaction so it is visible to the worker even if the process
                 // outer transaction rolls back. Best-effort: do not throw on failure.
-                logger.debug("CasePersistDelegate calling RequestPersistService.createRequest(caseInstanceId={}, entityType={})", caseInstanceId, "Order");
+                logger.info("CasePersistDelegate calling RequestPersistService.createRequest(caseInstanceId={}, entityType={})", caseInstanceId, "Order");
                 requestPersistService.createRequest(caseInstanceId, "Order", null);
-                logger.debug("CasePersistDelegate created sys_expose_request (REQUIRES_NEW) for {}", caseInstanceId);
+                logger.info("CasePersistDelegate created sys_expose_request (REQUIRES_NEW) for {}", caseInstanceId);
             } catch (Throwable t) {
                 logger.warn("CasePersistDelegate: failed to create sys_expose_request for {}: {}", caseInstanceId, t.getMessage());
             }
         } catch (Exception ex) {
             // Log full stacktrace so the cause (schema, constraint, driver) is visible during debugging
             logger.warn("Failed to persist case blob for {}:", caseInstanceId, ex);
+        }
+    }
+
+    private String resolveCaseInstanceId(DelegateExecution execution, Map<String, Object> vars) {
+        try {
+            // Prefer variables explicitly carrying the CMMN case id (from CMMN->BPMN mapping or propagated vars)
+            if (vars != null) {
+                Object v = vars.get("caseInstanceId");
+                if (v == null) v = vars.get("caseId");
+                if (v == null) v = vars.get("scopeId");
+                if (v == null) v = vars.get("parentId");
+                if (v != null) {
+                    logger.debug("resolveCaseInstanceId: using vars-based id={} varsKeys={}", v, vars.keySet());
+                    return String.valueOf(v);
+                }
+            }
+            // Try execution variables next
+            try {
+                Object ev = execution.getVariable("caseInstanceId");
+                if (ev != null) {
+                    logger.debug("resolveCaseInstanceId: using execution variable caseInstanceId={}", ev);
+                    return String.valueOf(ev);
+                }
+            } catch (Exception ignored) {}
+            try {
+                Object ev = execution.getVariable("caseId");
+                if (ev != null) {
+                    logger.debug("resolveCaseInstanceId: using execution variable caseId={}", ev);
+                    return String.valueOf(ev);
+                }
+            } catch (Exception ignored) {}
+            // Fallback to the BPMN process instance id (legacy behavior)
+            String fallback = execution.getProcessInstanceId();
+            logger.debug("resolveCaseInstanceId: falling back to processInstanceId={}", fallback);
+            return fallback;
+        } catch (Throwable t) {
+            logger.warn("resolveCaseInstanceId: unexpected error while resolving case id, falling back to processInstanceId", t);
+            return execution.getProcessInstanceId();
         }
     }
 
@@ -226,4 +264,3 @@ public class CasePersistDelegate implements JavaDelegate {
         }
     }
 }
-

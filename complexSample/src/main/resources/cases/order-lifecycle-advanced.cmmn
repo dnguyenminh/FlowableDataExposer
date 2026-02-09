@@ -51,6 +51,11 @@
                     <extensionElements>
                         <design:stencilid><![CDATA[ProcessTask]]></design:stencilid>
                         <design:stencilsuperid><![CDATA[Task]]></design:stencilsuperid>
+                        <flowable:in source="caseInstanceId" target="caseInstanceId" />
+                        <flowable:in source="total" target="total" />
+                        <flowable:in source="customer" target="customer" />
+                        <flowable:in source="meta" target="meta" />
+                        <flowable:in source="items" target="items" />
                     </extensionElements>
                     <processRefExpression><![CDATA[onlineOrderProcess]]></processRefExpression>
                 </processTask>

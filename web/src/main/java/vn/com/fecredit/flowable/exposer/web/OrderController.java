@@ -80,20 +80,37 @@ public class OrderController {
      * Start a CMMN case (reflection) and return the case instance id.
      */
     private String startCmmnCase(Map<String, Object> vars) throws ReflectiveOperationException {
+        org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OrderController.class);
         Object cmmn = null;
+        String foundBean = null;
         if (appCtx.containsBean("cmmnRuntimeService")) {
             cmmn = appCtx.getBean("cmmnRuntimeService");
+            foundBean = "cmmnRuntimeService";
         } else {
             for (String n : appCtx.getBeanDefinitionNames()) {
-                if (n.toLowerCase().contains("cmmnruntimeservice")) { cmmn = appCtx.getBean(n); break; }
+                if (n.toLowerCase().contains("cmmnruntimeservice")) { cmmn = appCtx.getBean(n); foundBean = n; break; }
             }
         }
         if (cmmn == null) throw new IllegalStateException("CMMN runtime not available");
+        log.info("Starting CMMN case via bean {} with vars keys={}", foundBean, vars == null ? 0 : vars.keySet());
         Object builder = cmmn.getClass().getMethod("createCaseInstanceBuilder").invoke(cmmn);
         builder.getClass().getMethod("caseDefinitionKey", String.class).invoke(builder, "orderCase");
         builder.getClass().getMethod("variables", Map.class).invoke(builder, vars);
         Object ci = builder.getClass().getMethod("start").invoke(builder);
-        return (String) ci.getClass().getMethod("getId").invoke(ci);
+        String id = (String) ci.getClass().getMethod("getId").invoke(ci);
+        log.info("Started CMMN case id={} (caseDefinitionKey=orderCase)", id);
+        
+        // Compensating update: map recent sys_case_data_store rows to the CMMN case id
+        try {
+            vn.com.fecredit.flowable.exposer.service.CaseDataPersistService persistService =
+                appCtx.getBean(vn.com.fecredit.flowable.exposer.service.CaseDataPersistService.class);
+            persistService.updateCaseInstanceIdForRecent(id, java.time.Duration.ofSeconds(5));
+            log.info("Compensating update completed for CMMN case id={}", id);
+        } catch (Exception e) {
+            log.warn("Compensating update failed for CMMN case id={}: {}", id, e.getMessage());
+        }
+        
+        return id;
     }
 
     @GetMapping("/{caseInstanceId}")
@@ -129,6 +146,64 @@ public class OrderController {
     }
 
     /**
+     * Get active steps/tasks for a case instance. Returns a list of task metadata.
+     */
+    @GetMapping("/{caseInstanceId}/steps")
+    public ResponseEntity<?> getCaseSteps(@PathVariable String caseInstanceId) {
+        try {
+            List<Map<String, String>> out = new ArrayList<>();
+            org.flowable.engine.TaskService taskService = null;
+            try {
+                if (appCtx.containsBean("taskService")) {
+                    taskService = appCtx.getBean(org.flowable.engine.TaskService.class);
+                } else {
+                    for (String n : appCtx.getBeanDefinitionNames()) {
+                        if (n.toLowerCase().contains("taskservice")) {
+                            taskService = appCtx.getBean(n, org.flowable.engine.TaskService.class);
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception e) { /* ignore */ }
+
+            if (taskService != null) {
+                List<org.flowable.task.api.Task> tasks = new ArrayList<>();
+                try {
+                    Object query = taskService.getClass().getMethod("createTaskQuery").invoke(taskService);
+                    java.lang.reflect.Method scopeIdM = query.getClass().getMethod("scopeId", String.class);
+                    Object q2 = scopeIdM.invoke(query, caseInstanceId);
+                    java.lang.reflect.Method listM = q2.getClass().getMethod("list");
+                    Object res = listM.invoke(q2);
+                    if (res instanceof List) tasks = (List) res;
+                } catch (Throwable ignored) {
+                    // Best-effort: if reflection fails, just return empty steps
+                }
+
+                for (var t : tasks) {
+                    Map<String, String> m = new HashMap<>();
+                    String key = null;
+                    try { key = t.getTaskDefinitionKey(); } catch (Throwable ignore) {}
+                    if (key == null || key.isBlank()) key = t.getId();
+                    m.put("id", t.getId());
+                    m.put("name", t.getName());
+                    m.put("taskDefinitionKey", key);
+                    m.put("image", "/steps/" + sanitize(key) + ".svg");
+                    out.add(m);
+                }
+            }
+
+            return ResponseEntity.ok(out);
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body(Map.of("error", ex.getMessage() == null ? ex.toString() : ex.getMessage()));
+        }
+    }
+
+    private String sanitize(String key) {
+        if (key == null) return "default";
+        return key.replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase();
+    }
+
+    /**
      * Trigger reindexing for a single case instance (or entity-wide fallback).
      *
      * Uses ApplicationContext + reflection to locate the runtime worker and
@@ -143,6 +218,13 @@ public class OrderController {
             if (m != null) {
                 m.invoke(worker, caseInstanceId);
                 return ResponseEntity.accepted().build();
+            }
+            // fallback: try direct bean call by type (handles proxy/reflection edge-cases)
+            try {
+                vn.com.fecredit.flowable.exposer.job.CaseDataWorker direct = appCtx.getBean(vn.com.fecredit.flowable.exposer.job.CaseDataWorker.class);
+                direct.reindexByCaseInstanceId(caseInstanceId);
+                return ResponseEntity.accepted().build();
+            } catch (Exception ignored) {
             }
             // fallback to entity-wide reindex
             worker.getClass().getMethod("reindexAll", String.class).invoke(worker, "Order");

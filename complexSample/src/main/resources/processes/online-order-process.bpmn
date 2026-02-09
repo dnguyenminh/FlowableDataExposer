@@ -21,7 +21,7 @@
     </sequenceFlow>
     <sequenceFlow id="flowInStock" name="Còn hàng" sourceRef="gwStock" targetRef="taskPayment" />
 
-    <userTask id="taskPayment" name="Khách thanh toán" flowable:assignee="${initiator}" />
+    <userTask id="taskPayment" name="Khách thanh toán" flowable:assignee="${execution != null &amp;&amp; execution.getVariable('initiator') != null ? execution.getVariable('initiator') : 'system'}" />
     <sequenceFlow id="f4" sourceRef="taskPayment" targetRef="taskPack" />
 
     <userTask id="taskPack" name="Đóng gói hàng" flowable:candidateGroups="warehouse" />

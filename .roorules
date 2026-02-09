@@ -1,0 +1,219 @@
+# FlowableDataExposer Project Rules
+
+## Project Overview
+This is a Spring Boot 3.x library implementing a Case Data Store (Source of Truth) with Dynamic Indexing for Flowable BPM/CMMN workflows, inspired by Pega's architecture.
+
+## Architectural Philosophy
+
+### Source of Truth (The Blob)
+- `sys_case_data_store` table is **PERMANENT** and stores the full, encrypted state of Cases
+- This table is **IMMUTABLE** - never delete records
+- All case variables are captured as encrypted JSON blobs using AES-256-GCM with Envelope Encryption
+
+### Derived Data (The Indexes)
+- Flat tables (e.g., `case_plain_*`) used **ONLY** for reporting and searching
+- Can be truncated and regenerated at any time from the Source of Truth
+- Index tables are derived via JsonPath extraction from the encrypted blob
+
+## Tech Stack
+- Java 21 (Virtual Threads, Records)
+- Gradle (Kotlin DSL)
+- Spring Boot 3.x
+- Flowable 7.x (BPMN + CMMN)
+- JsonPath for data extraction
+- H2 Database (development), supports PostgreSQL/MySQL (production)
+
+## Core Components
+
+### 1. Event-Driven Data Persistence
+**GlobalFlowableEventListener** captures Flowable events and automatically persists case data:
+- **CASE_STARTED**: Persists CMMN case variables when case starts
+- **PROCESS_STARTED**: Persists BPMN process variables when process starts  
+- **TASK_COMPLETED**: Updates case data when user/wait tasks complete
+- **PROCESS_COMPLETED**: Persists final state when process ends
+
+**Implementation Notes**:
+- Use `getVariables()` instead of `getProcessVariables()` for BPMN - variables aren't populated in the execution entity at PROCESS_STARTED time
+- BPMN entities are `ExecutionEntity`, not `ProcessInstanceEntity` - check for both `execution` and `processinstance` in class names
+- CMMN uses `CaseInstance` entities - check for `caseinstance` in class names
+
+### 2. Hierarchical Metadata (Pega-style Class Structure)
+
+#### Canonical Base Classes (in `core/src/main/resources/metadata/classes/`):
+- **FlowableObject** (ancestor): Audit fields - `className`, `createTime`, `startUserId`, `lastUpdated`, `lastUpdateUserId`, `tenantId`
+- **WorkObject** (extends FlowableObject): Case-oriented - `caseInstanceId`, `businessKey`, `state`
+- **ProcessObject** (extends FlowableObject): Process-oriented - `processInstanceId`, `processDefinitionId`, `parentInstanceId`
+- **DataObject** (extends FlowableObject): Reusable nested/data DTOs
+
+#### Metadata Resolution Rules (DETERMINISTIC & AUDITABLE):
+**Precedence** (highest to lowest):
+1. **Child class** - direct mappings on the class always win
+2. **Mixins** - applied in declared order, **last mixin wins** in conflicts
+3. **Parent chain** - bottom-up (nearest parent wins over distant parent)
+4. **Source priority**: DB-backed (latest enabled) > file-backed canonical
+
+**Special Behaviors**:
+- `remove: true` follows same precedence rules - higher-precedence can reintroduce removed columns
+- **Type conflicts**: Same `plainColumn` with different types MUST produce diagnostic; CI strict mode should fail
+- **Circular dependencies**: Parent/mixin cycles MUST be detected and reported - no infinite recursion
+- **Provenance**: Every resolved FieldMapping MUST attach: `sourceClass`, `sourceKind` (file|db), `sourceModule`, `sourceLocation`
+
+#### Required Tests:
+- Unit tests: precedence, mixin ordering, remove semantics, type conflicts, cycle detection
+- Integration: E2E blob → CaseDataWorker → case_plain_* columns populated
+- Auto-DDL: Generate DDL, apply to H2, verify columns exist and are writable
+
+### 3. Dynamic Extract & Index Engine
+
+**CaseDataWorker** (async using Virtual Threads):
+- Decrypts blob from `sys_case_data_store`
+- Queries metadata mappings with deterministic precedence
+- Uses JsonPath to extract properties:
+  - Single: `$.total` → `total_amount`
+  - List/Array: `$.items[0].id` → `item_1_id` (index-based)
+  - Map: `$.params['color']` → `color_attr` (key-based)
+  - Parent audit fields: `$.createTime`, `$.startUserId`, `$.tenantId`
+- Performs dynamic SQL UPSERT into index tables
+
+### 4. Re-indexing Feature
+**Crucial Design Principle**: Index tables can be rebuilt from the blob store
+- Service method: `reindexAll(String className)`
+- Fetches all records from `sys_case_data_store` for a specific type
+- Decrypts and re-extracts properties with current metadata
+- Refreshes corresponding index tables
+- **Proves that the Blob is the Source of Truth**
+
+## Database Schema
+
+### Permanent Tables:
+- **sys_case_data_store**: `id` (PK), `case_instance_id`, `entity_type`, `payload` (encrypted BLOB), `encrypted_key`, `status`, `created_at`, `updated_at`
+- **sys_expose_class_def**: Metadata for class definitions and inheritance
+- **sys_expose_mapping**: Field mappings (JsonPath → index column)
+- **sys_expose_request**: Exposure request tracking
+
+### Index Tables (User-defined):
+- `case_plain_order`, `case_plain_credit_card`, etc.
+- Flat structure optimized for reporting/searching
+- Can be dropped and recreated via re-indexing
+
+## Key Business Rules
+
+### UC-01: Persist Case Data (Source of Truth)
+- Interceptor captures Flowable commit events
+- CasePersistDelegate enriches variables with Flowable metadata (createTime, startUserId, businessKey, tenantId)
+- Generate random DataKey, encrypt JSON with AES-256-GCM
+- Encrypt DataKey with MasterKey (Envelope Encryption)
+- Store in `sys_case_data_store` (permanent, immutable)
+
+### UC-02: Property Exposure
+- Async worker decrypts blob
+- Queries metadata with precedence rules
+- Extracts via JsonPath
+- UPSERT into index tables
+- Must expose parent-class audit fields for cross-cutting reports
+
+### UC-03: Metadata Management
+- BA/Developer configures mappings via UI or JSON files
+- Supports inheritance, mixins, and field removal
+- Strict validation: cycle detection, type checking, provenance tracking
+- CI must fail on conflicts in strict mode
+
+### UC-04: Re-indexing
+- User adds new mapping to metadata
+- Clicks "Re-index All" for that class
+- System scans `sys_case_data_store` by `entity_type`
+- Decrypts, extracts with new metadata, updates index
+- **Ensures 5-year-old data can show new report columns**
+
+## Coding Standards
+
+### Event Listener Guidelines:
+- Always check entity class names in lowercase: `cls.toLowerCase()`
+- For BPMN: check `cls.contains("execution") || cls.contains("processinstance")`
+- For CMMN: check `cls.contains("caseinstance")`
+- Use reflection to access entity methods: `getVariables()`, `getId()`, `getProcessDefinitionId()`, etc.
+- Wrap all persistence operations in try-catch to prevent listener from rolling back main transaction
+- Return `false` from `isFailOnException()` to isolate listener errors
+
+### Logging Standards:
+- Use `log.info()` for key milestones: "CASE_STARTED: Persisting...", "PROCESS_STARTED: Persisting..."
+- Use `log.debug()` for detailed diagnostics
+- Use `log.error()` for exceptions with full stack trace
+- Always log: caseInstanceId/processInstanceId, entityType, variable count
+
+### Testing Requirements:
+- **Unit tests**: Every metadata resolution rule (precedence, mixins, remove, cycles, type conflicts)
+- **Integration tests**: End-to-end from blob storage → worker → index population
+- **E2E tests**: Full workflow with CMMN cases and BPMN processes
+- Use `@Transactional` and in-memory H2 for fast test execution
+- Mock external dependencies (encryption, network calls)
+
+## Security Constraints
+- Master Key NEVER stored in database
+- All decrypt operations MUST be logged
+- Encrypted payload in `sys_case_data_store` is immutable
+- Use Envelope Encryption: DataKey encrypts payload, MasterKey encrypts DataKey
+
+## Performance Guidelines
+- Use Virtual Threads for async indexing (Java 21)
+- Use Caffeine Cache for metadata to avoid DB queries
+- Index tables optimized for SELECT/JOIN - never query JSON blob for reports
+- Batch processing for re-indexing operations
+
+## Module Structure
+- **core**: Event listeners, persistence services, metadata resolution, case data worker
+- **web**: REST controllers, UI for metadata management
+- **complexSample**: Demo application with sample CMMN cases and BPMN processes
+
+## CI/CD Requirements
+- Checkstyle: Enforce code style, require Javadoc on public APIs
+- Unit test coverage: Minimum 80% for core module
+- Integration tests must pass before merge
+- Lint failures: circular dependencies, type conflicts, cross-module duplicates
+- Build must fail in strict mode on metadata conflicts
+
+## Common Patterns
+
+### Event Listener Registration:
+```java
+@Bean
+public EngineConfigurationConfigurer<SpringProcessEngineConfiguration> bpmnEventListenerConfigurer(
+        GlobalFlowableEventListener listener) {
+    return engineConfiguration -> {
+        Map<String, List<FlowableEventListener>> typedListeners = 
+            engineConfiguration.getTypedEventListeners();
+        if (typedListeners == null) {
+            typedListeners = new HashMap<>();
+            engineConfiguration.setTypedEventListeners(typedListeners);
+        }
+        for (FlowableEngineEventType eventType : FlowableEngineEventType.values()) {
+            typedListeners.computeIfAbsent(eventType.name(), k -> new ArrayList<>())
+                          .add(listener);
+        }
+    };
+}
+```
+
+### Variable Extraction (BPMN):
+```java
+// Use getVariables(), not getProcessVariables() - variables not populated at PROCESS_STARTED
+Method getVars = entity.getClass().getMethod("getVariables");
+Object varsObj = getVars.invoke(entity);
+if (varsObj instanceof Map) {
+    Map<String, Object> vars = (Map<String, Object>) varsObj;
+    // Process variables...
+}
+```
+
+### Metadata Precedence:
+```
+Order (child=WorkObject, mixins=[MixinA, MixinB])
+Resolution order: Order mappings > MixinB > MixinA > WorkObject > FlowableObject
+```
+
+## Documentation
+- All public APIs must have Javadoc
+- Complex algorithms must have inline comments
+- Update README.md when adding features
+- Document breaking changes in CHANGELOG.md
+- Reference use case documents in `.github/prompts/` for business context

@@ -3,6 +3,8 @@ package vn.com.fecredit.flowable.exposer.delegate;
 import org.flowable.dmn.api.DmnDecisionService;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +23,7 @@ import java.util.Map;
  */
 @Component("dmnDecisionDelegate")
 public class DmnDecisionDelegate implements JavaDelegate {
+    private static final Logger log = LoggerFactory.getLogger(DmnDecisionDelegate.class);
     private final DmnDecisionService dmnDecisionService; // may be null in constrained classpaths
 
     public DmnDecisionDelegate(ObjectProvider<DmnDecisionService> dmnDecisionServiceProvider) {
@@ -33,14 +36,17 @@ public class DmnDecisionDelegate implements JavaDelegate {
      */
     @Override
     public void execute(DelegateExecution execution) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> vars = execution.getVariables();
+        log.info("DmnDecisionDelegate.execute - executionId={} varsKeys={}", execution.getId(), vars == null ? 0 : vars.keySet());
+
         if (dmnDecisionService != null) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> vars = execution.getVariables();
             List<Map<String, Object>> result = evaluateWithEngine(vars);
             applyDecisionResult(execution, result);
             return;
         }
 
+        log.info("DmnDecisionDelegate.execute - DMN engine not available, using javaFallback");
         // Engine not available on the classpath — use a deterministic Java fallback.
         javaFallback(execution);
     }
