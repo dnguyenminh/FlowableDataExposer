@@ -161,4 +161,21 @@ public class MetadataResolver {
     }
 
     public void evictAll() { resolvedCache.invalidateAll(); }
+
+    /**
+     * Backwards-compat shim expected by core module: return raw MetadataDefinition for a class/entityType.
+     */
+    public MetadataDefinition resolveForClass(String classOrEntityType) {
+        try {
+            Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(classOrEntityType);
+            if (dbDef.isPresent()) return mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
+            MetadataDefinition md = fileDefs.get(classOrEntityType);
+            if (md != null) return md;
+            return fileDefs.values().stream()
+                    .filter(d -> classOrEntityType.equals(d.entityType) || classOrEntityType.equals(d._class))
+                    .findFirst().orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

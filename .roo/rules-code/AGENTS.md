@@ -7,3 +7,8 @@
 - Encryption: follow envelope encryption pattern used in `CasePersistDelegate` (dataKey + masterKey). Do not embed master key in DB or code.
 - When adding new metadata fields, update provenance (`sourceClass`, `sourceKind`, `sourceModule`, `sourceLocation`) if your change affects resolution.
 - UI static assets are duplicated (web vs complexSample). Edit `complexSample` for the runnable demo; edits in `web` affect the `web` module only.
+- Code must follow the SOLID principle.
+- Each method must not be longer than 20 lines.
+- Each java file must not be longer than 200 lines.
+- Must use OOP design pattern as much as possible, using libraries for this is accepted.
+  

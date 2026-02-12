@@ -25,26 +25,25 @@ public class CaseDataPersistService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper om;
     private final MetadataAnnotator annotator;
+    private final CaseDataWriter writer;
 
-    public CaseDataPersistService(JdbcTemplate jdbc, ObjectMapper om, MetadataAnnotator annotator) {
+    public CaseDataPersistService(JdbcTemplate jdbc, ObjectMapper om, MetadataAnnotator annotator, CaseDataWriter writer) {
         this.jdbc = jdbc;
         this.om = om;
         this.annotator = annotator;
+        this.writer = writer;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void persistSysCaseData(String caseInstanceId, String entityType, String payload) {
         log.info("persistSysCaseData - entering caseInstanceId={} entityType={} payloadLen={}", caseInstanceId, entityType, (payload == null ? 0 : payload.length()));
 
-        // Best-effort: parse payload JSON and annotate nested objects with @class markers so downstream
-        // components (resolver, annotator, indexer) can rely on class metadata. Failure must not prevent persist.
         String annotatedPayload = payload;
         if (payload != null && om != null && annotator != null) {
             try {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> m = om.readValue(payload, Map.class);
                 if (m != null) {
-                    // annotate by entityType where possible
                     try { annotator.annotate(m, entityType); } catch (Exception t) { log.debug("Annotator failed during persist: {}", t.getMessage()); }
                     annotatedPayload = om.writeValueAsString(m);
                 }
@@ -53,68 +52,32 @@ public class CaseDataPersistService {
             }
         }
 
-        // Compute next version for this case: max(version)+1 or 1 if none
         Integer currentMax = null;
         try {
-            // only attempt version read if the column exists
             if (hasColumn("sys_case_data_store", "version")) {
                 currentMax = jdbc.queryForObject(
                         "SELECT MAX(version) FROM sys_case_data_store WHERE case_instance_id = ?",
                         Integer.class, caseInstanceId);
             }
         } catch (Exception e) {
-            // If the column/table doesn't exist yet, treat as new row
             log.debug("Could not read current version for {}: {}", caseInstanceId, e.getMessage());
         }
         int nextVersion = (currentMax == null) ? 1 : (currentMax + 1);
 
-        // Bind the created_at explicitly
         Timestamp now = new Timestamp(System.currentTimeMillis());
-        // choose insert form depending on whether new columns exist (supports older DB files)
         boolean hasStatus = hasColumn("sys_case_data_store", "status");
         boolean hasError = hasColumn("sys_case_data_store", "error_message");
         boolean hasVer = hasColumn("sys_case_data_store", "version");
 
-        if (hasStatus || hasError || hasVer) {
-            String sql = "INSERT INTO sys_case_data_store(case_instance_id, entity_type, payload, created_at"
-                    + (hasStatus ? ", status" : "")
-                    + (hasError ? ", error_message" : "")
-                    + (hasVer ? ", version" : "")
-                    + ") VALUES (?,?,?,?"
-                    + (hasStatus ? ",?" : "")
-                    + (hasError ? ",?" : "")
-                    + (hasVer ? ",?" : "")
-                    + ")";
-            // assemble params in order
-            java.util.List<Object> params = new java.util.ArrayList<>();
-            params.add(caseInstanceId);
-            params.add(entityType);
-            params.add(annotatedPayload);
-            params.add(now);
-            if (hasStatus) params.add("PENDING");
-            if (hasError) params.add(null);
-            if (hasVer) params.add(nextVersion);
-            log.info("Executing SQL: {} params={} (payload length={})", sql, params, (annotatedPayload == null ? 0 : annotatedPayload.length()));
-            try {
-                jdbc.update(sql, params.toArray());
-            } catch (Exception e) {
-                log.error("persistSysCaseData - insert failed for {}: {}", caseInstanceId, e.getMessage(), e);
-                throw e;
-            }
-        } else {
-            // fallback to minimal insert when DB schema is old
-            String sql = "INSERT INTO sys_case_data_store(case_instance_id, entity_type, payload, created_at) VALUES (?,?,?,?)";
-            log.info("Executing legacy SQL: {} params=[{}, {}, <payload length:{}>, {}]", sql,
-                    caseInstanceId, entityType, (annotatedPayload == null ? 0 : annotatedPayload.length()), now);
-            try {
-                jdbc.update(sql, caseInstanceId, entityType, annotatedPayload, now);
-            } catch (Exception e) {
-                log.error("persistSysCaseData - legacy insert failed for {}: {}", caseInstanceId, e.getMessage(), e);
-                throw e;
-            }
+        // Delegate insert to writer
+        try {
+            writer.insertSysCaseData(caseInstanceId, entityType, annotatedPayload, now, hasStatus, hasError, hasVer, nextVersion);
+        } catch (Exception e) {
+            log.error("persistSysCaseData - insert failed for {}: {}", caseInstanceId, e.getMessage(), e);
+            throw e;
         }
+
         log.info("persisted sys_case_data_store for {} (version={})", caseInstanceId, nextVersion);
-        // Temporary verification: confirm rows inserted for this caseInstanceId to help E2E determinism
         try {
             Integer cnt = jdbc.queryForObject("SELECT COUNT(1) FROM sys_case_data_store WHERE case_instance_id = ?", Integer.class, caseInstanceId);
             log.info("verify persistSysCaseData: existing rows for {} = {}", caseInstanceId, cnt);

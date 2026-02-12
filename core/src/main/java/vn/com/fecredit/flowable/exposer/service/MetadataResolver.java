@@ -339,6 +339,63 @@ public class MetadataResolver {
 
     public void evictAll() { resolvedCache.invalidateAll(); }
 
+    // Backwards-compatible resolver helper expected by other modules (web)
+    // Provide the same helper signatures that older/other-module code may call.
+
+    private void parseAndRegisterResource(Resource r) {
+        try (InputStream is = r.getInputStream()) {
+            String txt = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            MetadataDefinition def = mapper.readValue(txt, MetadataDefinition.class);
+            if (def._class == null) return;
+            fileDefs.put(def._class, def);
+        } catch (Exception ex) {
+            // ignore malformed/partial files and continue
+        }
+    }
+
+    private MetadataDefinition findDefinitionFromDbOrFiles(String classOrEntityType) throws Exception {
+        // reuse existing resolveForClass behaviour
+        return resolveForClass(classOrEntityType);
+    }
+
+    private List<MetadataDefinition> buildInheritanceChain(MetadataDefinition md) throws Exception {
+        List<MetadataDefinition> chain = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        MetadataDefinition cur = md;
+        while (cur != null && cur._class != null && !seen.contains(cur._class)) {
+            chain.add(cur);
+            seen.add(cur._class);
+            if (cur.parent != null) {
+                if (seen.contains(cur.parent)) {
+                    addDiagnostic(md._class, "circular parent reference detected: " + cur.parent + " (referenced by " + cur._class + ")");
+                    break;
+                }
+                Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> pdb = repo.findByClassNameOrderByVersionDesc(cur.parent).stream().findFirst();
+                if (pdb.isPresent()) {
+                    cur = mapper.readValue(pdb.get().getJsonDefinition(), MetadataDefinition.class);
+                } else {
+                    cur = fileDefs.get(cur.parent);
+                }
+            } else {
+                cur = null;
+            }
+        }
+        Collections.reverse(chain);
+        return chain;
+    }
+
+    private Map<String, MetadataDefinition.FieldMapping> mergeFieldMappings(List<MetadataDefinition> chain) {
+        Map<String, MetadataDefinition.FieldMapping> merged = new LinkedHashMap<>();
+        for (MetadataDefinition def : chain) {
+            if (def.mappings == null) continue;
+            for (MetadataDefinition.FieldMapping fm : def.mappings) {
+                if (Boolean.TRUE.equals(fm.remove)) { merged.remove(fm.column); continue; }
+                merged.put(fm.column, fm);
+            }
+        }
+        return merged;
+    }
+
     public MetadataDefinition resolveForClass(String classOrEntityType) {
         try {
             Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(classOrEntityType);
