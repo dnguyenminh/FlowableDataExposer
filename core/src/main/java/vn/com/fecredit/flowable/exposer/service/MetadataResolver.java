@@ -1,34 +1,21 @@
 package vn.com.fecredit.flowable.exposer.service;
 
-// ...existing code...
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Resolves metadata definitions for entity classes and entityTypes.
- *
- * <p>Runtime strategy:
- * - prefer the latest enabled DB-backed definition (for admin overrides)
- * - otherwise fall back to file-backed canonical definitions in
- *   <code>src/main/resources/metadata/</code>
- * - support inheritance (parent chain) and nested-class resolution
- *   used by the indexer and {@code CaseDataWorker}.</p>
  *
  * Responsibilities:
  * - provide merged/flattened field mappings (jsonPath + plainColumn)
@@ -41,46 +28,18 @@ public class MetadataResolver {
     private static final Logger log = LoggerFactory.getLogger(MetadataResolver.class);
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final Map<String, MetadataDefinition> fileDefs = new HashMap<>();
     private final SysExposeClassDefRepository repo;
     private final Cache<String, Map<String, MetadataDefinition.FieldMapping>> resolvedCache;
+    private final MetadataResourceLoader resourceLoader;
 
     @Autowired
-    public MetadataResolver(SysExposeClassDefRepository repo) {
+    public MetadataResolver(SysExposeClassDefRepository repo, MetadataResourceLoader resourceLoader) {
         this.repo = repo;
+        this.resourceLoader = resourceLoader;
         this.resolvedCache = Caffeine.newBuilder()
                 .maximumSize(1024)
                 .expireAfterWrite(Duration.ofMinutes(10))
                 .build();
-        loadFileMetadata();
-    }
-
-    // Load canonical metadata from classpath: src/main/resources/metadata/*.json
-    private void loadFileMetadata() {
-        try {
-            var resolver = new PathMatchingResourcePatternResolver();
-            // load any metadata json files under metadata/ (including metadata/classes/)
-            Resource[] resources = resolver.getResources("classpath*:metadata/**/*.json");
-            log.debug("MetadataResolver found {} metadata files on classpath", resources.length);
-            for (Resource r : resources) {
-                try (InputStream is = r.getInputStream()) {
-                    String txt = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                    MetadataDefinition def = mapper.readValue(txt, MetadataDefinition.class);
-                    if (def._class == null) continue;
-                    // ignore canonical files that have been migrated out of core (avoid duplicate defs on classpath)
-                    if (Boolean.TRUE.equals(def.deprecated) || (def.migratedToModule != null && !def.migratedToModule.isBlank())) {
-                        log.debug("Skipping migrated/ deprecated metadata file: {} -> class={} migratedTo={}", r.getFilename(), def._class, def.migratedToModule);
-                        continue;
-                    }
-                    // allow file-backed class defs that may not have entityType (nested class defs)
-                    fileDefs.put(def._class, def);
-                    log.debug("Loaded metadata file: {} -> class={} entityType={}", r.getFilename(), def._class, def.entityType);
-                }
-            }
-        } catch (Exception e) {
-            // non-fatal for runtime; tests will catch missing files
-            log.debug("MetadataResolver.loadFileMetadata failed: {}", e.getMessage());
-        }
     }
 
     /**
@@ -98,23 +57,48 @@ public class MetadataResolver {
         return resolvedCache.get(classOrEntityType, k -> resolveAndFlatten(classOrEntityType));
     }
 
-    // Change resolveAndFlatten to return merged FieldMapping map instead of only jsonPath
     private Map<String, MetadataDefinition.FieldMapping> resolveAndFlatten(String classOrEntityType) {
         try {
-            // 1) prefer DB-backed (by entityType)
-            Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(classOrEntityType);
             MetadataDefinition md = null;
-            if (dbDef.isPresent()) {
-                md = mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
-            } else {
-                // try by class name
-                md = fileDefs.get(classOrEntityType);
-                if (md == null) {
-                    md = fileDefs.values().stream()
-                            .filter(d -> classOrEntityType.equals(d.entityType) || classOrEntityType.equals(d._class))
-                            .findFirst().orElse(null);
+
+            List<String> candidates = new ArrayList<>();
+            if (classOrEntityType != null) candidates.add(classOrEntityType);
+            String lower = classOrEntityType == null ? "" : classOrEntityType.toLowerCase(Locale.ROOT);
+            if (lower.endsWith("process")) {
+                String base = classOrEntityType.substring(0, classOrEntityType.length() - "process".length());
+                if (!base.isBlank()) {
+                    candidates.add(base);
+                    candidates.add(Character.toUpperCase(base.charAt(0)) + base.substring(1));
                 }
             }
+
+            // try DB-backed defs for any candidate
+            for (String cand : candidates) {
+                try {
+                    Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(cand);
+                    if (dbDef.isPresent()) {
+                        md = mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
+                        break;
+                    }
+                } catch (Exception ex) {
+                    // ignore and continue
+                }
+            }
+
+            // fallback: try file-backed defs by exact _class key (case-sensitive), then case-insensitive
+            if (md == null) {
+                for (String cand : candidates) {
+                    Optional<MetadataDefinition> opt = resourceLoader.getByClass(cand);
+                    if (opt.isPresent()) { md = opt.get(); break; }
+                }
+            }
+
+            // final fallback: search fileDefs by entityType/_class equality against candidates (case-insensitive)
+            if (md == null) {
+                Optional<MetadataDefinition> found = resourceLoader.findByEntityTypeOrClassCandidates(candidates);
+                if (found.isPresent()) md = found.get();
+            }
+
             if (md == null) return Collections.emptyMap();
 
             List<MetadataDefinition> chain = new ArrayList<>();
@@ -133,7 +117,7 @@ public class MetadataResolver {
                     if (pdb.isPresent()) {
                         cur = mapper.readValue(pdb.get().getJsonDefinition(), MetadataDefinition.class);
                     } else {
-                        cur = fileDefs.get(cur.parent);
+                        cur = resourceLoader.getByClass(cur.parent).orElse(null);
                     }
                 } else {
                     cur = null;
@@ -152,7 +136,7 @@ public class MetadataResolver {
                                 addDiagnostic(md._class, "circular mixin reference detected: " + mixinName + " (referenced by " + def._class + ")");
                                 continue;
                             }
-                            MetadataDefinition mixin = fileDefs.get(mixinName);
+                            MetadataDefinition mixin = resourceLoader.getByClass(mixinName).orElse(null);
                             if (mixin == null) {
                                 Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> mdb = repo.findByClassNameOrderByVersionDesc(mixinName).stream().findFirst();
                                 if (mdb.isPresent()) mixin = mapper.readValue(mdb.get().getJsonDefinition(), MetadataDefinition.class);
@@ -164,24 +148,22 @@ public class MetadataResolver {
                                         merged.remove(fm.column);
                                         continue;
                                     }
-                                    // set provenance for mixin-sourced mapping
                                     MetadataDefinition.FieldMapping fmCopy = cloneMappingWithProvenance(fm, mixin, "file");
-                                    // detect type conflict on plainColumn
                                     checkTypeConflict(md._class, merged, fmCopy);
-                                    // reuse nested-class resolution logic from below (simplified path join)
                                     if (fmCopy.klass != null && !fmCopy.klass.isBlank()) {
-                                        MetadataDefinition nested = fileDefs.get(fmCopy.klass);
+                                        MetadataDefinition nested = resourceLoader.getByClass(fmCopy.klass).orElse(null);
                                         if (nested != null && nested.jsonPath != null && !nested.jsonPath.isBlank()) {
                                             String base = nested.jsonPath.trim();
                                             String rel = fmCopy.jsonPath == null ? "" : fmCopy.jsonPath.trim();
-                                            if (fmCopy.arrayIndex != null) {
-                                                if (!base.endsWith("]")) base = base + "[" + fmCopy.arrayIndex + "]";
-                                            }
                                             if (rel.startsWith("$")) rel = rel.substring(1);
                                             if (rel.startsWith(".")) rel = rel.substring(1);
+                                            if (fmCopy.arrayIndex != null && !rel.contains("(") && !rel.contains("[")) {
+                                                if (!base.endsWith("]")) base = base + "[" + fmCopy.arrayIndex + "]";
+                                            }
                                             String joined = base;
                                             if (!rel.isEmpty()) {
-                                                if (!joined.endsWith(".")) joined = joined + ".";
+                                                if (!joined.endsWith(".") && !rel.startsWith("(") && !rel.startsWith("[") && !rel.startsWith("."))
+                                                    joined = joined + ".";
                                                 joined = joined + rel;
                                             }
                                             fmCopy.jsonPath = joined;
@@ -206,29 +188,23 @@ public class MetadataResolver {
 
                     MetadataDefinition.FieldMapping fmToApply = cloneMappingWithProvenance(fm, def, "file");
 
-                    // If mapping references a nested class (klass), resolve that class's jsonPath and adjust the mapping jsonPath accordingly
                     if (fmToApply.klass != null && !fmToApply.klass.isBlank()) {
-                        MetadataDefinition nested = fileDefs.get(fmToApply.klass);
+                        MetadataDefinition nested = resourceLoader.getByClass(fmToApply.klass).orElse(null);
                         if (nested == null) {
-                            // try to find among chain
                             nested = chain.stream().filter(d -> fmToApply.klass.equals(d._class)).findFirst().orElse(null);
                         }
                         if (nested != null && nested.jsonPath != null && !nested.jsonPath.isBlank()) {
-                            // combine nested.jsonPath and fm.jsonPath (which is relative to the class)
                             String base = nested.jsonPath.trim();
                             String rel = fmToApply.jsonPath == null ? "" : fmToApply.jsonPath.trim();
-                            // handle arrayIndex on mapping: if provided, and base ends with ']', append index access
-                            if (fmToApply.arrayIndex != null) {
-                                // if base already points to an array, append [index]
-                                if (!base.endsWith("]")) base = base + "[" + fmToApply.arrayIndex + "]";
-                            }
-                            // if rel starts with '$' or '.', strip leading '$' to avoid duplicate root token
                             if (rel.startsWith("$")) rel = rel.substring(1);
                             if (rel.startsWith(".")) rel = rel.substring(1);
-                            // join ensuring a single '.' between
+                            if (fmToApply.arrayIndex != null && !rel.contains("(") && !rel.contains("[")) {
+                                if (!base.endsWith("]")) base = base + "[" + fmToApply.arrayIndex + "]";
+                            }
                             String joined = base;
                             if (!rel.isEmpty()) {
-                                if (!joined.endsWith(".")) joined = joined + ".";
+                                if (!joined.endsWith(".") && !rel.startsWith("(") && !rel.startsWith("[") && !rel.startsWith("."))
+                                    joined = joined + ".";
                                 joined = joined + rel;
                             }
                             fmToApply.jsonPath = joined;
@@ -286,17 +262,14 @@ public class MetadataResolver {
         }
     }
 
-    public java.util.List<String> diagnosticsFor(String classOrEntityType) {
-        return diagnostics.getOrDefault(classOrEntityType, java.util.List.of());
-    }
+    public java.util.List<String> diagnosticsFor(String classOrEntityType) { return diagnostics.getOrDefault(classOrEntityType, java.util.List.of()); }
 
     // used by admin APIs / tests to evict cache when metadata changes
-    public void evict(String classOrEntityType) {
-        resolvedCache.invalidate(classOrEntityType);
-    }
+    public void evict(String classOrEntityType) { resolvedCache.invalidate(classOrEntityType); }
 
     public void evictAll() { resolvedCache.invalidateAll(); }
 
+    // Backwards-compatible helpers expected by other modules (web)
     public MetadataDefinition resolveForClass(String classOrEntityType) {
         try {
             Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(classOrEntityType);
@@ -304,11 +277,9 @@ public class MetadataResolver {
             if (dbDef.isPresent()) {
                 md = mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
             } else {
-                md = fileDefs.get(classOrEntityType);
+                md = resourceLoader.getByClass(classOrEntityType).orElse(null);
                 if (md == null) {
-                    md = fileDefs.values().stream()
-                            .filter(d -> classOrEntityType.equals(d.entityType) || classOrEntityType.equals(d._class))
-                            .findFirst().orElse(null);
+                    md = resourceLoader.findByEntityTypeOrClassCandidates(Arrays.asList(classOrEntityType)).orElse(null);
                 }
             }
             return md;

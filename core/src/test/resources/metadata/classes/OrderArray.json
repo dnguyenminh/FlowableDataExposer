@@ -1,0 +1,10 @@
+{
+  "class": "OrderArray",
+  "entityType": "OrderArray",
+  "jsonPath": "$",
+  "mappings": [
+    { "column": "item_1_id", "class": "Item", "jsonPath": "$.id", "arrayIndex": 0, "plainColumn": "item_1_id" },
+    { "column": "item_1_id_paren", "class": "Item", "jsonPath": "(0).id", "plainColumn": "item_1_id_paren" },
+    { "column": "item_named_id", "class": "Item", "jsonPath": "$.['sku-123'].id", "plainColumn": "item_named_id" }
+  ]
+}

@@ -72,7 +72,14 @@ public class MetadataDefinition {
     // Field-level defs for annotator
     public static class FieldDef {
         public String name; // field name in JSON/vars
+        // primary class hint: allow both explicit "className" and legacy "type" in JSON files
         public String className; // e.g. "Customer"
+        public String type; // legacy alias for className
+        // elementClass/elementType hints for collections / maps
         public String elementClass; // for arrays/lists e.g. "Item"
+        public String elementType; // legacy alias for elementClass
+        // array/list indicators (helpful when only "type" is provided)
+        public Boolean isArray;
+        public Boolean isList;
     }
 }

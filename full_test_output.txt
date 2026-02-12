@@ -1,0 +1,11 @@
+2026-02-11T22:00:22.164+07:00  INFO 24264 --- [ionShutdownHook] o.f.j.s.i.a.AbstractAsyncExecutor        : Shutting down the async job executor [org.flowable.spring.job.service.SpringAsyncExecutor] for engine cmmn
+2026-02-11T22:00:22.165+07:00  INFO 24264 --- [et-expired-jobs] o.f.j.s.i.a.ResetExpiredJobsRunnable     : stopped resetting expired jobs for engine cmmn
+2026-02-11T22:00:22.165+07:00  INFO 24264 --- [uire-timer-jobs] o.f.j.s.i.a.AcquireTimerJobsRunnable     : stopped async job due acquisition for engine cmmn
+2026-02-11T22:00:22.165+07:00  INFO 24264 --- [uire-async-jobs] o.f.j.s.i.a.AcquireAsyncJobsDueRunnable  : stopped async job due acquisition for engine cmmn
+2026-02-11T22:00:22.169+07:00  INFO 24264 --- [ionShutdownHook] o.f.j.s.i.a.AbstractAsyncExecutor        : Shutting down the async job executor [org.flowable.spring.job.service.SpringAsyncExecutor] for engine bpmn
+2026-02-11T22:00:22.169+07:00  INFO 24264 --- [et-expired-jobs] o.f.j.s.i.a.ResetExpiredJobsRunnable     : stopped resetting expired jobs for engine bpmn
+2026-02-11T22:00:22.169+07:00  INFO 24264 --- [uire-timer-jobs] o.f.j.s.i.a.AcquireTimerJobsRunnable     : stopped async job due acquisition for engine bpmn
+2026-02-11T22:00:22.169+07:00  INFO 24264 --- [uire-async-jobs] o.f.j.s.i.a.AcquireAsyncJobsDueRunnable  : stopped async job due acquisition for engine bpmn
+2026-02-11T22:00:22.173+07:00  INFO 24264 --- [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-02-11T22:00:22.176+07:00  INFO 24264 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-02-11T22:00:22.177+07:00  INFO 24264 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
