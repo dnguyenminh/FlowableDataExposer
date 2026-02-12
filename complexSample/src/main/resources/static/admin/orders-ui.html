@@ -29,9 +29,21 @@
       .badge{display:inline-block;padding:6px 8px;border-radius:999px;background:#f1f5ff;color:var(--primary);font-weight:600}
       @media(max-width:980px){.grid{grid-template-columns:1fr}.card{padding:14px}}
       /* modal */
-      .modal-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.5);display:none;align-items:center;justify-content:center}
-      .modal{background:var(--card);width:720px;max-width:95%;border-radius:12px;padding:18px}
-      .modal pre{background:#0f1720;color:#e6f1ff;padding:12px;border-radius:8px}
+      .modal-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.5);display:none;align-items:center;justify-content:center;padding:20px}
+      .modal{background:var(--card);width:900px;max-width:100%;border-radius:12px;padding:18px;box-shadow:0 12px 40px rgba(2,6,23,0.25)}
+      .modal-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eef2f7;padding-bottom:12px}
+      .modal-body{margin-top:12px}
+      .modal-content-grid{display:flex;gap:16px;align-items:flex-start}
+      .modal-left{flex:1}
+      .modal-right{width:420px}
+      .json-pre{max-height:420px;overflow:auto;background:#0f1720;color:#e6f1ff;padding:12px;border-radius:8px}
+      .diagram-view{width:100%;height:360px;border:1px solid #eef2f7;border-radius:8px;background:#fff}
+      /* step images */
+      .steps-viewport{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px}
+      .step-card{text-align:center;width:90px}
+      .step-img{width:72px;height:72px;object-fit:contain;border-radius:8px;border:2px solid transparent;background:#fff;padding:8px}
+      .step-active{border-color:var(--primary);box-shadow:0 6px 18px rgba(11,95,255,0.12)}
+      .djs-overlay .highlight, .djs-element.highlight > .djs-visual { stroke:#ff4d4d !important; stroke-width:4px !important; }
     </style>
   </head>
   <body>
@@ -107,9 +119,70 @@
       </div>
     </main>
 
-    <div id="modal" class="modal-backdrop"><div class="modal"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Order Details</h3><button id="close-modal" class="btn ghost">Close</button></div><div id="modal-body" style="margin-top:12px"></div></div></div>
+    <div id="modal" class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header"><h3 style="margin:0">Order Details</h3><button id="close-modal" class="btn ghost">Close</button></div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
 
     <script>
+      // viewers (bpmn-js / cmmn-js) will be created on demand
+      let bpmnViewer, cmmnViewer;
+
+      async function ensureBpmn(){
+        if(window.BpmnJS) return;
+        await new Promise((res, rej)=>{
+          const s = document.createElement('script');
+          s.src = 'https://unpkg.com/bpmn-js@9.0.3/dist/bpmn-viewer.development.js';
+          s.onload = res; s.onerror = rej; document.head.appendChild(s);
+        });
+      }
+
+      async function ensureCmmn(){
+        if(window.CmmnJS) return;
+        await new Promise((res, rej)=>{
+          const s = document.createElement('script');
+          s.src = 'https://unpkg.com/cmmn-js@8.0.0/dist/cmmn-viewer.development.js';
+          s.onload = res; s.onerror = rej; document.head.appendChild(s);
+        });
+      }
+
+      function clearDiagram(){
+        const el = document.getElementById('diagram'); if(!el) return; el.innerHTML='';
+        if(bpmnViewer){ try{ bpmnViewer.destroy(); }catch(e){} bpmnViewer = null }
+        if(cmmnViewer){ try{ cmmnViewer.destroy(); }catch(e){} cmmnViewer = null }
+      }
+
+      async function renderBpmnDiagram(xml, activeIds){
+        try{
+          await ensureBpmn();
+          clearDiagram();
+          bpmnViewer = new BpmnJS({ container: '#diagram' });
+          const result = await bpmnViewer.importXML(xml);
+          const canvas = bpmnViewer.get('canvas');
+          const registry = bpmnViewer.get('elementRegistry');
+          canvas.zoom('fit-viewport');
+          for(const id of (activeIds||[])){
+            try{ if(registry.get(id)) canvas.addMarker(id, 'highlight'); }catch(e){}
+          }
+        }catch(e){ /* ignore diagram errors */ }
+      }
+
+      async function renderCmmnDiagram(xml, activeIds){
+        try{
+          await ensureCmmn();
+          clearDiagram();
+          cmmnViewer = new CmmnJS({ container: '#diagram' });
+          await cmmnViewer.importXML(xml);
+          const canvas = cmmnViewer.get('canvas');
+          const registry = cmmnViewer.get('elementRegistry');
+          canvas.zoom('fit-viewport');
+          for(const id of (activeIds||[])){
+            try{ if(registry.get(id)) canvas.addMarker(id, 'highlight'); }catch(e){}
+          }
+        }catch(e){ /* ignore diagram errors */ }
+      }
       // UX: structured form -> payload, validation, list with search + pagination, modal
       const apiBase = '/api/orders';
       const startBtn = document.getElementById('start');
@@ -199,10 +272,63 @@
           const res = await fetch(apiBase + '/' + encodeURIComponent(id));
           if(res.status===404){ modalBody.innerHTML = '<div class="small">Not found</div>'; return }
           const j = await res.json();
-          modalBody.innerHTML = `<pre>${JSON.stringify(j, null, 2)}</pre><div style="margin-top:10px"><button id="reindex-btn" class="btn">Reindex</button></div>`;
+          modalBody.innerHTML = `<div class="modal-content-grid">
+              <div class="modal-left">
+                <div class="modal-left-top">
+                  <div class="json-pre" id="json-pre">${JSON.stringify(j, null, 2)}</div>
+                </div>
+                <div style="margin-top:10px"><button id="reindex-btn" class="btn">Reindex</button></div>
+              </div>
+              <div class="modal-right">
+                <label class="small">Model Diagram</label>
+                <div id="diagram" class="diagram-view"></div>
+              </div>
+            </div>`;
           document.getElementById('reindex-btn').addEventListener('click', async ()=>{
             await fetch(apiBase + '/' + encodeURIComponent(id) + '/reindex', {method:'POST'}); alert('Reindex triggered');
           });
+
+          // fetch steps and render diagram highlighting active element IDs
+          try{
+            const r2 = await fetch(apiBase + '/' + encodeURIComponent(id) + '/steps');
+            if(r2.ok){
+              const steps = await r2.json();
+              const activeIds = (steps || []).map(s => s.taskDefinitionKey || s.id).filter(Boolean);
+
+              // determine model type: prefer explicit property, otherwise infer from steps
+              const modelType = j.startType || j.type || ((steps && steps.length && steps[0].taskDefinitionKey) ? 'bpmn' : 'cmmn');
+
+              // attempt to load the appropriate XML and render (try multiple candidate paths)
+              async function tryRender(){
+                if(modelType === 'bpmn'){
+                  const bpmnCandidates = ['/processes/online-order-process.bpmn'];
+                  for(const p of bpmnCandidates){
+                    try{
+                      const xm = await fetch(p);
+                      if(!xm.ok) throw new Error('BPMN not found '+p);
+                      const xml = await xm.text();
+                      renderBpmnDiagram(xml, activeIds);
+                      return;
+                    }catch(e){ /* try next */ }
+                  }
+                }
+                // cmmn fallback (try multiple candidate filenames)
+                const cmmnCandidates = ['/cases/order-lifecycle-advanced.cmmn'];
+                for(const p of cmmnCandidates){
+                  try{
+                    const xm2 = await fetch(p);
+                    if(!xm2.ok) throw new Error('CMMN not found '+p);
+                    const xml2 = await xm2.text();
+                    renderCmmnDiagram(xml2, activeIds);
+                    return;
+                  }catch(e){ /* try next */ }
+                }
+              }
+
+              tryRender();
+            }
+          }catch(e){ /* ignore step/diagram errors */ }
+
         }catch(e){ modalBody.innerHTML = '<div class="small">Error</div>' }
       }
 

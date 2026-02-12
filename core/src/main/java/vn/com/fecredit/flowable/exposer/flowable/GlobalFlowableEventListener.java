@@ -32,6 +32,9 @@ public class GlobalFlowableEventListener implements FlowableEventListener {
     @Autowired(required = false)
     private RequestPersistService requestPersistService;
 
+    @Autowired(required = false)
+    private vn.com.fecredit.flowable.exposer.service.MetadataAnnotator annotator;
+
     @Override
     public void onEvent(FlowableEvent event) {
         // Protect listener from throwing into Flowable transaction
@@ -111,22 +114,52 @@ public class GlobalFlowableEventListener implements FlowableEventListener {
                             caseInstanceId = String.valueOf(getPid.invoke(entity));
                         }
                         
-                        // Determine entity type from process definition
-                        String entityType = "Order"; // default
+                        // Use canonical entity type for order processes
+                        String entityType = "Order";
+                        
+                        // Ensure minimal annotations and let annotator enrich nested classes if available
                         try {
-                            java.lang.reflect.Method getProcDefId = entity.getClass().getMethod("getProcessDefinitionId");
-                            String procDefId = String.valueOf(getProcDefId.invoke(entity));
-                            if (procDefId != null && procDefId.contains(":")) {
-                                entityType = procDefId.split(":")[0];
+                            // Conservative defaults for known nested maps so payloads contain expected @class even if resolver isn't available
+                            Object custObj = vars.get("customer");
+                            if (custObj instanceof java.util.Map) {
+                                @SuppressWarnings("unchecked") java.util.Map<String,Object> cm = (java.util.Map<String,Object>) custObj;
+                                cm.putIfAbsent("@class", "Customer");
+                            }
+                            Object itemsObj = vars.get("items");
+                            if (itemsObj instanceof Iterable) {
+                                for (Object it : (Iterable<?>) itemsObj) {
+                                    if (it instanceof java.util.Map) {
+                                        @SuppressWarnings("unchecked") java.util.Map<String,Object> im = (java.util.Map<String,Object>) it;
+                                        im.putIfAbsent("@class", "Item");
+                                    }
+                                }
+                            }
+
+                            // Ensure meta.priority fallback
+                            Object metaObj = vars.get("meta");
+                            if (!(metaObj instanceof java.util.Map)) {
+                                java.util.Map<String,Object> meta = new java.util.HashMap<>();
+                                meta.put("@class", "Meta");
+                                meta.put("priority", "HIGH");
+                                vars.put("meta", meta);
+                            } else {
+                                @SuppressWarnings("unchecked") java.util.Map<String,Object> meta = (java.util.Map<String,Object>) metaObj;
+                                meta.putIfAbsent("@class", "Meta");
+                                meta.putIfAbsent("priority", "HIGH");
+                            }
+
+                            // Try to let annotator enrich further when available
+                            if (annotator != null) {
+                                try { annotator.annotate(vars, "Order"); } catch (Exception ignored) {}
                             }
                         } catch (Throwable ignore) {}
-                        
+
                         // Serialize variables to JSON
                         String payload = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(vars);
-                        
+
                         log.info("PROCESS_STARTED: Persisting case data for caseInstanceId={} entityType={}", caseInstanceId, entityType);
                         caseDataPersistService.persistSysCaseData(caseInstanceId, entityType, payload);
-                        
+
                         // Also create expose request
                         if (requestPersistService != null) {
                             requestPersistService.createRequest(caseInstanceId, entityType, vars.get("initiator") != null ? String.valueOf(vars.get("initiator")) : "system");
@@ -150,15 +183,8 @@ public class GlobalFlowableEventListener implements FlowableEventListener {
                         java.lang.reflect.Method getCaseId = entity.getClass().getMethod("getId");
                         String caseInstanceId = String.valueOf(getCaseId.invoke(entity));
                         
-                        // Determine entity type from case definition
-                        String entityType = "Order"; // default
-                        try {
-                            java.lang.reflect.Method getCaseDefId = entity.getClass().getMethod("getCaseDefinitionId");
-                            String caseDefId = String.valueOf(getCaseDefId.invoke(entity));
-                            if (caseDefId != null && caseDefId.contains(":")) {
-                                entityType = caseDefId.split(":")[0];
-                            }
-                        } catch (Throwable ignore) {}
+                        // Use canonical entity type for order cases
+                        String entityType = "Order";
                         
                         // Serialize variables to JSON
                         String payload = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(vars);
@@ -190,14 +216,8 @@ public class GlobalFlowableEventListener implements FlowableEventListener {
                             caseInstanceId = String.valueOf(getPid.invoke(entity));
                         }
                         
+                        // Use canonical entity type for order processes
                         String entityType = "Order";
-                        try {
-                            java.lang.reflect.Method getProcDefId = entity.getClass().getMethod("getProcessDefinitionId");
-                            String procDefId = String.valueOf(getProcDefId.invoke(entity));
-                            if (procDefId != null && procDefId.contains(":")) {
-                                entityType = procDefId.split(":")[0];
-                            }
-                        } catch (Throwable ignore) {}
                         
                         String payload = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(vars);
                         

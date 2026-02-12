@@ -10,11 +10,11 @@ import vn.com.fecredit.flowable.exposer.entity.CasePlainOrder;
 import vn.com.fecredit.flowable.exposer.repository.CasePlainOrderRepository;
 
 import java.util.*;
-import org.flowable.task.service.TaskService;
-
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OrderController.class);
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final RuntimeService runtimeService;
@@ -140,17 +140,22 @@ public class OrderController {
     @GetMapping("/{caseInstanceId}/steps")
     public ResponseEntity<?> getCaseSteps(@PathVariable String caseInstanceId) {
         try {
+            log.info("getCaseSteps start caseId={}", caseInstanceId);
             List<Map<String, String>> out = new ArrayList<>();
 
-            TaskService taskService = null;
+            Object taskService = null;
             try {
-                if (appCtx.containsBean("taskService")) taskService = appCtx.getBean(TaskService.class);
+                if (appCtx.containsBean("taskService")) taskService = appCtx.getBean("taskService");
                 else {
                     for (String n : appCtx.getBeanDefinitionNames()) {
-                        if (n.toLowerCase().contains("taskservice")) { taskService = appCtx.getBean(n, TaskService.class); break; }
+                        if (n.toLowerCase().contains("taskservice")) { taskService = appCtx.getBean(n); break; }
                     }
                 }
-            } catch (Exception e) { /* ignore */ }
+            } catch (Exception e) {
+                log.warn("failed to obtain TaskService from context: {}", e.toString());
+            }
+
+            log.debug("taskService present: {}", taskService != null);
 
             if (taskService != null) {
                 List<org.flowable.task.api.Task> tasks = new ArrayList<>();
@@ -173,15 +178,68 @@ public class OrderController {
                         }
                     }
 
+                    if (query != null) log.debug("TaskQuery class: {}", query.getClass().getName());
+
                     if (query != null) {
-                        java.lang.reflect.Method scopeIdM = query.getClass().getMethod("scopeId", String.class);
-                        Object q2 = scopeIdM.invoke(query, caseInstanceId);
-                        java.lang.reflect.Method listM = q2.getClass().getMethod("list");
-                        Object res = listM.invoke(q2);
-                        if (res instanceof List) tasks = (List) res;
+                        // Try multiple query filters in order until one returns results
+                        String[] candidateFilters = new String[]{"scopeId", "processInstanceId", "caseInstanceId", "executionId"};
+                        for (String filter : candidateFilters) {
+                            try {
+                                boolean methodAvailable = false;
+                                for (java.lang.reflect.Method mm : query.getClass().getMethods()) if (mm.getName().equals(filter)) { methodAvailable = true; break; }
+                                log.debug("filter method '{}' available: {}", filter, methodAvailable);
+                                if (!methodAvailable) continue;
+                                java.lang.reflect.Method f = query.getClass().getMethod(filter, String.class);
+                                Object q2 = f.invoke(query, caseInstanceId);
+                                java.lang.reflect.Method listM = q2.getClass().getMethod("list");
+                                Object res = listM.invoke(q2);
+                                if (res instanceof List) {
+                                    List tmp = (List) res;
+                                    log.info("filter {} returned {} tasks", filter, tmp.size());
+                                    if (!tmp.isEmpty()) { tasks = tmp; break; }
+                                }
+                            } catch (NoSuchMethodException nsf) {
+                                // filter not available on this Flowable version; try next
+                                log.debug("filter {} not present on TaskQuery", filter);
+                            } catch (Throwable t) {
+                                log.warn("error invoking filter {}: {}", filter, t.toString());
+                            }
+                        }
+
+                        // If still empty, attempt plain list() as a last resort and then filter client-side
+                        if (tasks.isEmpty()) {
+                            try {
+                                java.lang.reflect.Method listAll = query.getClass().getMethod("list");
+                                Object resAll = listAll.invoke(query);
+                                if (resAll instanceof List) {
+                                    @SuppressWarnings("unchecked")
+                                    List<org.flowable.task.api.Task> all = (List) resAll;
+                                    log.info("listAll returned {} tasks; performing client-side matching", all.size());
+                                    for (var t : all) {
+                                        boolean match = false;
+                                        try { if (caseInstanceId.equals(t.getProcessInstanceId())) match = true; } catch (Throwable ignore) {}
+                                        try { if (caseInstanceId.equals(t.getScopeId())) match = true; } catch (Throwable ignore) {}
+                                        try {
+                                            java.lang.reflect.Method sr = t.getClass().getMethod("getScopeReference");
+                                            Object srVal = sr.invoke(t);
+                                            if (caseInstanceId.equals(srVal)) match = true;
+                                        } catch (Throwable ignore) {}
+                                        if (match) {
+                                            log.debug("matched task id={} name={} procId={} scopeId={}", t.getId(), t.getName(), t.getProcessInstanceId(), t.getScopeId());
+                                            tasks.add(t);
+                                        }
+                                    }
+                                    log.info("client-side matched {} tasks", tasks.size());
+                                }
+                            } catch (NoSuchMethodException nsme2) {
+                                // cannot list — ignore
+                                log.debug("TaskQuery.list() not available");
+                            }
+                        }
                     }
                 } catch (Throwable ignored) {
                     // Best-effort: if reflection fails, just return empty steps
+                    log.warn("error while reflecting TaskService/TaskQuery: {}", ignored.toString());
                 }
 
                 for (var t : tasks) {
@@ -197,11 +255,110 @@ public class OrderController {
                 }
             }
 
+            // Ensure UI gets a model fallback when no tasks were discoverable
+            if (out.isEmpty()) {
+                Map<String, String> fallback = new HashMap<>();
+                fallback.put("id", "model");
+                fallback.put("name", "Model Diagram");
+                fallback.put("taskDefinitionKey", "model");
+                fallback.put("image", "/steps/default.svg");
+                out.add(fallback);
+            }
+
             return ResponseEntity.ok(out);
         } catch (Exception ex) {
             Map<String, Object> err = new HashMap<>();
             err.put("error", ex.getMessage() == null ? ex.toString() : ex.getMessage());
             return ResponseEntity.status(500).body(err);
+        }
+    }
+
+    @GetMapping("/{caseInstanceId}/diagram")
+    public ResponseEntity<byte[]> getCaseDiagram(@PathVariable String caseInstanceId) {
+        try {
+            // Try BPMN candidates first, then CMMN
+            String[] bpmnCandidates = new String[]{"processes/online-order-process.bpmn", "processes/orderProcess.bpmn", "processes/online-order-process.bpmn"};
+            String[] cmmnCandidates = new String[]{"cases/order-lifecycle-advanced.cmmn", "cases/orderCase.cmmn", "cases/order-lifecycle-advanced.cmmn"};
+
+            ClassLoader cl = getClass().getClassLoader();
+            java.nio.file.Path xmlFile = null;
+            boolean foundBpmn = false;
+
+            for (String p : bpmnCandidates) {
+                try (java.io.InputStream is = cl.getResourceAsStream(p)) {
+                    if (is != null) {
+                        xmlFile = java.nio.file.Files.createTempFile("model-", ".bpmn");
+                        java.nio.file.Files.copy(is, xmlFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        foundBpmn = true;
+                        break;
+                    }
+                } catch (Exception ignore) { }
+            }
+
+            if (xmlFile == null) {
+                for (String p : cmmnCandidates) {
+                    try (java.io.InputStream is = cl.getResourceAsStream(p)) {
+                        if (is != null) {
+                            xmlFile = java.nio.file.Files.createTempFile("model-", ".cmmn");
+                            java.nio.file.Files.copy(is, xmlFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                            break;
+                        }
+                    } catch (Exception ignore) { }
+                }
+            }
+
+            if (xmlFile == null) {
+                // fallback to default svg
+                try (java.io.InputStream r = cl.getResourceAsStream("static/steps/default.svg")) {
+                    if (r != null) {
+                        byte[] svg = r.readAllBytes();
+                        return ResponseEntity.ok().header("Cache-Control","no-cache").contentType(org.springframework.http.MediaType.valueOf("image/svg+xml")).body(svg);
+                    }
+                }
+                return ResponseEntity.notFound().build();
+            }
+
+            java.nio.file.Path out = java.nio.file.Files.createTempFile("diagram-", ".png");
+            try {
+                // Use core utility to render PNG
+                vn.com.fecredit.flowable.exposer.util.ModelValidatorRenderer.renderToPng(xmlFile, out);
+                byte[] png = java.nio.file.Files.readAllBytes(out);
+                return ResponseEntity.ok().header("Cache-Control","no-cache").contentType(org.springframework.http.MediaType.IMAGE_PNG).body(png);
+            } catch (Throwable e) {
+                // rendering failed — return svg fallback if available
+                try (java.io.InputStream r = cl.getResourceAsStream("static/steps/default.svg")) {
+                    if (r != null) {
+                        byte[] svg = r.readAllBytes();
+                        return ResponseEntity.ok().header("Cache-Control","no-cache").contentType(org.springframework.http.MediaType.valueOf("image/svg+xml")).body(svg);
+                    }
+                } catch (Exception ignore) { }
+                return ResponseEntity.status(500).body((e.getMessage() == null ? e.toString() : e.getMessage()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } finally {
+                try { java.nio.file.Files.deleteIfExists(xmlFile); } catch (Exception ignore) {}
+                try { java.nio.file.Files.deleteIfExists(out); } catch (Exception ignore) {}
+            }
+        } catch (Exception ex) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("error", ex.getMessage() == null ? ex.toString() : ex.getMessage());
+            try {
+                byte[] b = (err.toString()).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                return ResponseEntity.status(500).contentType(org.springframework.http.MediaType.TEXT_PLAIN).body(b);
+            } catch (Exception ignore) {
+                return ResponseEntity.status(500).build();
+            }
+        }
+    }
+
+    @GetMapping("/processes/{filename:.+}")
+    public ResponseEntity<byte[]> serveProcessFile(@PathVariable String filename) {
+        try (java.io.InputStream is = getClass().getClassLoader().getResourceAsStream("processes/" + filename)) {
+            if (is == null) return ResponseEntity.notFound().build();
+            byte[] b = is.readAllBytes();
+            String contentType = filename.endsWith(".bpmn") || filename.endsWith(".cmmn") ? "application/xml" : "application/octet-stream";
+            return ResponseEntity.ok().header("Cache-Control","no-cache").contentType(org.springframework.http.MediaType.valueOf(contentType)).body(b);
+        } catch (java.io.IOException e) {
+            byte[] msg = (e.getMessage() == null ? e.toString() : e.getMessage()).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            return ResponseEntity.status(500).contentType(org.springframework.http.MediaType.TEXT_PLAIN).body(msg);
         }
     }
 

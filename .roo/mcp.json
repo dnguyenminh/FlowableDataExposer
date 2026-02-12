@@ -8,7 +8,10 @@
 			],
 			"alwaysAllow": [
 				"browser_navigate",
-				"browser_evaluate"
+				"browser_evaluate",
+				"browser_snapshot",
+				"browser_wait_for",
+				"browser_close"
 			]
 		}
 	}

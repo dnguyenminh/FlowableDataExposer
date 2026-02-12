@@ -102,19 +102,57 @@ public class MetadataResolver {
     private Map<String, MetadataDefinition.FieldMapping> resolveAndFlatten(String classOrEntityType) {
         try {
             // 1) prefer DB-backed (by entityType)
-            Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(classOrEntityType);
             MetadataDefinition md = null;
-            if (dbDef.isPresent()) {
-                md = mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
-            } else {
-                // try by class name
-                md = fileDefs.get(classOrEntityType);
-                if (md == null) {
-                    md = fileDefs.values().stream()
-                            .filter(d -> classOrEntityType.equals(d.entityType) || classOrEntityType.equals(d._class))
-                            .findFirst().orElse(null);
+
+            // Build candidate keys to attempt resolution. This allows aliases such as
+            // process definition keys (e.g. "orderProcess") to resolve to the canonical
+            // metadata class (e.g. "Order").
+            List<String> candidates = new ArrayList<>();
+            if (classOrEntityType != null) candidates.add(classOrEntityType);
+            String lower = classOrEntityType == null ? "" : classOrEntityType.toLowerCase(Locale.ROOT);
+            if (lower.endsWith("process")) {
+                String base = classOrEntityType.substring(0, classOrEntityType.length() - "process".length());
+                if (!base.isBlank()) {
+                    candidates.add(base);
+                    candidates.add(Character.toUpperCase(base.charAt(0)) + base.substring(1));
                 }
             }
+
+            // try DB-backed defs for any candidate
+            for (String cand : candidates) {
+                try {
+                    Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(cand);
+                    if (dbDef.isPresent()) {
+                        md = mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
+                        break;
+                    }
+                } catch (Exception ex) {
+                    // ignore and continue
+                }
+            }
+
+            // fallback: try file-backed defs by exact _class key (case-sensitive), then case-insensitive search
+            if (md == null) {
+                for (String cand : candidates) {
+                    md = fileDefs.get(cand);
+                    if (md == null) {
+                        // try case-insensitive match on _class key
+                        md = fileDefs.entrySet().stream()
+                                .filter(e -> e.getKey().equalsIgnoreCase(cand))
+                                .map(Map.Entry::getValue)
+                                .findFirst().orElse(null);
+                    }
+                    if (md != null) break;
+                }
+            }
+
+            // final fallback: search fileDefs by entityType/_class equality against candidates (case-insensitive)
+            if (md == null) {
+                md = fileDefs.values().stream()
+                        .filter(d -> candidates.stream().anyMatch(c -> (d.entityType != null && c.equalsIgnoreCase(d.entityType)) || (d._class != null && c.equalsIgnoreCase(d._class))))
+                        .findFirst().orElse(null);
+            }
+
             if (md == null) return Collections.emptyMap();
 
             List<MetadataDefinition> chain = new ArrayList<>();
@@ -174,14 +212,18 @@ public class MetadataResolver {
                                         if (nested != null && nested.jsonPath != null && !nested.jsonPath.isBlank()) {
                                             String base = nested.jsonPath.trim();
                                             String rel = fmCopy.jsonPath == null ? "" : fmCopy.jsonPath.trim();
-                                            if (fmCopy.arrayIndex != null) {
-                                                if (!base.endsWith("]")) base = base + "[" + fmCopy.arrayIndex + "]";
-                                            }
+                                            // strip leading '$' and optional '.' from relative path
                                             if (rel.startsWith("$")) rel = rel.substring(1);
                                             if (rel.startsWith(".")) rel = rel.substring(1);
+                                            // preserve explicit index or map access in rel (items(0) or items[0] or [key])
+                                            if (fmCopy.arrayIndex != null && !rel.contains("(") && !rel.contains("[")) {
+                                                if (!base.endsWith("]")) base = base + "[" + fmCopy.arrayIndex + "]";
+                                            }
+                                            // join without inserting extra dot when rel starts with '(' or '['
                                             String joined = base;
                                             if (!rel.isEmpty()) {
-                                                if (!joined.endsWith(".")) joined = joined + ".";
+                                                if (!joined.endsWith(".") && !rel.startsWith("(") && !rel.startsWith("[") && !rel.startsWith("."))
+                                                    joined = joined + ".";
                                                 joined = joined + rel;
                                             }
                                             fmCopy.jsonPath = joined;
@@ -217,18 +259,18 @@ public class MetadataResolver {
                             // combine nested.jsonPath and fm.jsonPath (which is relative to the class)
                             String base = nested.jsonPath.trim();
                             String rel = fmToApply.jsonPath == null ? "" : fmToApply.jsonPath.trim();
-                            // handle arrayIndex on mapping: if provided, and base ends with ']', append index access
-                            if (fmToApply.arrayIndex != null) {
-                                // if base already points to an array, append [index]
-                                if (!base.endsWith("]")) base = base + "[" + fmToApply.arrayIndex + "]";
-                            }
-                            // if rel starts with '$' or '.', strip leading '$' to avoid duplicate root token
+                            // strip leading '$' and optional '.' from relative path
                             if (rel.startsWith("$")) rel = rel.substring(1);
                             if (rel.startsWith(".")) rel = rel.substring(1);
-                            // join ensuring a single '.' between
+                            // preserve explicit index or map access in rel; only apply legacy arrayIndex when rel lacks index notation
+                            if (fmToApply.arrayIndex != null && !rel.contains("(") && !rel.contains("[")) {
+                                if (!base.endsWith("]")) base = base + "[" + fmToApply.arrayIndex + "]";
+                            }
+                            // join without inserting extra dot when rel starts with '(' or '['
                             String joined = base;
                             if (!rel.isEmpty()) {
-                                if (!joined.endsWith(".")) joined = joined + ".";
+                                if (!joined.endsWith(".") && !rel.startsWith("(") && !rel.startsWith("[") && !rel.startsWith("."))
+                                    joined = joined + ".";
                                 joined = joined + rel;
                             }
                             fmToApply.jsonPath = joined;

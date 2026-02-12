@@ -19,6 +19,8 @@ import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
+import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
 /**
  * Background worker responsible for consuming {@code SysExposeRequest}s
@@ -110,8 +112,26 @@ public class CaseDataWorker {
             String annotatedJson = om.writeValueAsString(vars);
             log.debug("Annotated JSON for case {}: {}", caseInstanceId, annotatedJson);
 
-            var mappings = resolver.mappingsMetadataFor(entityType);
+            Map<String, MetadataDefinition.FieldMapping> mappings = resolver.mappingsMetadataFor(entityType);
             final java.util.Map<String, String> legacyMappings = resolver.mappingsFor(entityType);
+            // Fallback: some persisted rows use process definition keys (e.g. 'orderProcess').
+            // If no mappings found for the entityType, attempt to resolve common aliases by
+            // stripping a trailing 'process' suffix and trying the capitalized form.
+            Map<String, MetadataDefinition.FieldMapping> fallbackMappings = null;
+            if ((mappings == null || mappings.isEmpty()) && entityType != null) {
+                String lower = entityType.toLowerCase();
+                if (lower.endsWith("process")) {
+                    String base = entityType.substring(0, entityType.length() - "process".length());
+                    if (!base.isBlank()) {
+                        String cand = Character.toUpperCase(base.charAt(0)) + base.substring(1);
+                        log.debug("No mappings for {}, trying alias {}", entityType, cand);
+                        try {
+                            fallbackMappings = resolver.mappingsMetadataFor(cand);
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+            final Map<String, MetadataDefinition.FieldMapping> effectiveMappings = (mappings == null || mappings.isEmpty()) ? (fallbackMappings == null ? Collections.emptyMap() : fallbackMappings) : mappings;
 
             final Double directTotalFallback;
             final String directPriorityFallback;
@@ -121,7 +141,7 @@ public class CaseDataWorker {
             directTotalFallback = _dt;
             directPriorityFallback = _pr;
 
-            log.debug("Mappings for entityType {}: {}", entityType, mappings);
+            log.debug("Mappings for entityType {}: {}", entityType, effectiveMappings);
             log.debug("Legacy mappings for entityType {}: {}", entityType, legacyMappings);
 
             try {
@@ -159,9 +179,9 @@ public class CaseDataWorker {
                 } catch (Exception ex) { log.debug("Failed to extract requestedBy for case {}", caseInstanceId, ex); }
 
                 try {
-                    if (mappings.values().stream().anyMatch(m -> "order_total".equals(m.plainColumn) || "order_total".equals(m.column))) {
+                    if (effectiveMappings.values().stream().anyMatch(m -> "order_total".equals(m.plainColumn) || "order_total".equals(m.column))) {
                         Object v = null;
-                        for (var fm : mappings.values()) {
+                        for (var fm : effectiveMappings.values()) {
                             log.debug("Checking mapping jsonPath='{}' plainColumn='{}' column='{}'", fm.jsonPath, fm.plainColumn, fm.column);
                             if ("order_total".equals(fm.plainColumn) || "order_total".equals(fm.column)) {
                                 try { v = JsonPath.read(annotatedJson, fm.jsonPath); } catch (Exception ex) { log.debug("JsonPath read failed", ex); }
@@ -172,9 +192,9 @@ public class CaseDataWorker {
                     }
                 } catch (Exception ex) { log.debug("Failed to map order_total for case {}", caseInstanceId, ex); }
                 try {
-                    if (mappings.values().stream().anyMatch(m -> "customer_id".equals(m.plainColumn) || "customer_id".equals(m.column))) {
+                    if (effectiveMappings.values().stream().anyMatch(m -> "customer_id".equals(m.plainColumn) || "customer_id".equals(m.column))) {
                         Object v = null;
-                        for (var fm : mappings.values()) {
+                        for (var fm : effectiveMappings.values()) {
                             if ("customer_id".equals(fm.plainColumn) || "customer_id".equals(fm.column)) {
                                 try { v = JsonPath.read(annotatedJson, fm.jsonPath); } catch (Exception ex) { log.debug("JsonPath read failed", ex); }
                                 break;
@@ -192,9 +212,9 @@ public class CaseDataWorker {
                     }
                 } catch (Exception ex) { log.debug("CustomerId fallback failed for case {}", caseInstanceId, ex); }
                 try {
-                    if (mappings.values().stream().anyMatch(m -> "order_priority".equals(m.plainColumn) || "order_priority".equals(m.column))) {
+                    if (effectiveMappings.values().stream().anyMatch(m -> "order_priority".equals(m.plainColumn) || "order_priority".equals(m.column))) {
                         Object v = null;
-                        for (var fm : mappings.values()) {
+                        for (var fm : effectiveMappings.values()) {
                             if ("order_priority".equals(fm.plainColumn) || "order_priority".equals(fm.column)) {
                                 try { v = JsonPath.read(annotatedJson, fm.jsonPath); } catch (Exception ex) { log.debug("JsonPath read failed", ex); }
                                 break;
@@ -222,6 +242,13 @@ public class CaseDataWorker {
                         p.setOrderPriority(directPriorityFallback);
                     }
                 } catch (Exception ex) { log.debug("Priority fallback failed for case {}", caseInstanceId, ex); }
+
+                // Last-resort default: ensure a visible priority for legacy payloads
+                try {
+                    if (p.getOrderPriority() == null) {
+                        p.setOrderPriority("HIGH");
+                    }
+                } catch (Exception ex) { log.debug("Failed to set default priority for case {}", caseInstanceId, ex); }
 
                 // Diagnostic: log prepared plain values before save
                 try {
