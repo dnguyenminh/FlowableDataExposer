@@ -87,7 +87,7 @@ public class CaseDataWorker {
             Object rowCreatedAt = row.get("createdAt");
             if (entityType == null) entityType = "Order";
 
-            Map<String, Object> vars = parsePayload(payload, caseInstanceId);
+            Map<String, Object> vars = CaseDataWorkerHelpers.parsePayload(om, payload, caseInstanceId);
 
             try { annotator.annotate(vars, entityType); } catch (Exception ex) { log.debug("Annotator failed for case {}", caseInstanceId, ex); }
 
@@ -97,7 +97,7 @@ public class CaseDataWorker {
             final Map<String, String> legacyMappings = resolver.mappingsFor(entityType);
             Map<String, MetadataDefinition.FieldMapping> effectiveMappings = computeEffectiveMappings(entityType, mappings);
 
-            var directFallbacks = extractDirectFallbacks(annotatedJson);
+            var directFallbacks = CaseDataWorkerHelpers.extractDirectFallbacks(annotatedJson);
 
             upsertPlain(caseInstanceId, annotatedJson, rowCreatedAt, effectiveMappings, legacyMappings, directFallbacks);
 
@@ -124,17 +124,6 @@ public class CaseDataWorker {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> parsePayload(String payload, String caseInstanceId) {
-        if (payload == null) return Collections.emptyMap();
-        try {
-            return om.readValue(payload, Map.class);
-        } catch (Exception e) {
-            log.warn("Payload for case {} is not valid JSON, skipping", caseInstanceId);
-            return Collections.emptyMap();
-        }
-    }
-
     private Map<String, MetadataDefinition.FieldMapping> computeEffectiveMappings(String entityType, Map<String, MetadataDefinition.FieldMapping> mappings) {
         if (mappings != null && !mappings.isEmpty()) return mappings;
         if (entityType == null) return Collections.emptyMap();
@@ -149,50 +138,22 @@ public class CaseDataWorker {
         return Collections.emptyMap();
     }
 
-    private java.util.Map<String, Object> extractDirectFallbacks(String annotatedJson) {
-        Double _dt = null; String _pr = null;
-        try { Object o = JsonPath.read(annotatedJson, "$.total"); if (o instanceof Number) _dt = ((Number)o).doubleValue(); } catch (Exception ignored) {}
-        try { Object pval = JsonPath.read(annotatedJson, "$.meta.priority"); if (pval != null) _pr = String.valueOf(pval); } catch (Exception ignored) {}
-        return Map.of("total", _dt, "priority", _pr);
-    }
-
     private void upsertPlain(String caseInstanceId, String annotatedJson, Object rowCreatedAt,
                              Map<String, MetadataDefinition.FieldMapping> effectiveMappings,
                              Map<String, String> legacyMappings, java.util.Map<String, Object> directFallbacks) {
         plainRepo.upsertByCaseInstanceId(caseInstanceId, (CasePlainOrder p) -> {
             p.setPlainPayload(annotatedJson);
-            setCreatedAtIfMissing(p, rowCreatedAt);
-            setRequestedByFromJson(p, annotatedJson);
+            CaseDataWorkerHelpers.setCreatedAtIfMissing(p, rowCreatedAt);
+            CaseDataWorkerHelpers.setRequestedByFromJson(p, annotatedJson);
             mapOrderTotal(p, annotatedJson, effectiveMappings);
             mapCustomerId(p, annotatedJson, effectiveMappings);
             mapOrderPriority(p, annotatedJson, effectiveMappings);
             applyLegacyFallbacks(p, annotatedJson, legacyMappings, directFallbacks);
-            ensureDefaultPriority(p);
+            CaseDataWorkerHelpers.ensureDefaultPriority(p);
             try {
                 log.info("Prepared plain for case {}: orderTotal={} customerId={} priority={}", caseInstanceId, p.getOrderTotal(), p.getCustomerId(), p.getOrderPriority());
             } catch (Exception ex) { log.debug("Failed to log prepared plain for case {}", caseInstanceId, ex); }
         }, plainRepo);
-    }
-
-    private void setCreatedAtIfMissing(CasePlainOrder p, Object rowCreatedAt) {
-        if (rowCreatedAt == null || p.getCreatedAt() != null) return;
-        try {
-            java.time.OffsetDateTime created = null;
-            if (rowCreatedAt instanceof java.time.OffsetDateTime odt) created = odt;
-            else if (rowCreatedAt instanceof java.time.Instant inst) created = java.time.OffsetDateTime.ofInstant(inst, java.time.ZoneOffset.UTC);
-            else if (rowCreatedAt instanceof java.sql.Timestamp ts) created = java.time.OffsetDateTime.ofInstant(ts.toInstant(), java.time.ZoneOffset.UTC);
-            else if (rowCreatedAt instanceof Long l) created = java.time.OffsetDateTime.ofInstant(java.time.Instant.ofEpochMilli(l), java.time.ZoneOffset.UTC);
-            if (created != null) p.setCreatedAt(created);
-        } catch (Exception ex) { log.debug("Failed to set createdAt: {}", ex.getMessage()); }
-    }
-
-    private void setRequestedByFromJson(CasePlainOrder p, String annotatedJson) {
-        try {
-            String req = null;
-            try { Object v = JsonPath.read(annotatedJson, "$.startUserId"); if (v != null) req = String.valueOf(v); } catch (Exception ignored) {}
-            if (req == null) { try { Object v = JsonPath.read(annotatedJson, "$.requestedBy"); if (v != null) req = String.valueOf(v); } catch (Exception ignored) {} }
-            if (req != null) p.setRequestedBy(req);
-        } catch (Exception ex) { log.debug("Failed to extract requestedBy: {}", ex.getMessage()); }
     }
 
     private void mapOrderTotal(CasePlainOrder p, String annotatedJson, Map<String, MetadataDefinition.FieldMapping> effectiveMappings) {
@@ -257,9 +218,5 @@ public class CaseDataWorker {
                 if (dp != null) p.setOrderPriority(String.valueOf(dp));
             }
         } catch (Exception ex) { log.debug("Legacy fallback failed: {}", ex.getMessage()); }
-    }
-
-    private void ensureDefaultPriority(CasePlainOrder p) {
-        try { if (p.getOrderPriority() == null) p.setOrderPriority("HIGH"); } catch (Exception ex) { log.debug("Failed to set default priority: {}", ex.getMessage()); }
     }
 }

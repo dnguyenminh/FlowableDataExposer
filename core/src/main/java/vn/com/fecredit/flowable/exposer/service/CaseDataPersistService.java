@@ -38,6 +38,26 @@ public class CaseDataPersistService {
     public void persistSysCaseData(String caseInstanceId, String entityType, String payload) {
         log.info("persistSysCaseData - entering caseInstanceId={} entityType={} payloadLen={}", caseInstanceId, entityType, (payload == null ? 0 : payload.length()));
 
+        String annotatedPayload = annotatePayload(payload, entityType);
+        int nextVersion = computeNextVersion(caseInstanceId);
+
+        Timestamp now = new Timestamp(System.currentTimeMillis());
+        boolean hasStatus = hasColumn("sys_case_data_store", "status");
+        boolean hasError = hasColumn("sys_case_data_store", "error_message");
+        boolean hasVer = hasColumn("sys_case_data_store", "version");
+
+        try {
+            writer.insertSysCaseData(caseInstanceId, entityType, annotatedPayload, now, hasStatus, hasError, hasVer, nextVersion);
+        } catch (Exception e) {
+            log.error("persistSysCaseData - insert failed for {}: {}", caseInstanceId, e.getMessage(), e);
+            throw e;
+        }
+
+        log.info("persisted sys_case_data_store for {} (version={})", caseInstanceId, nextVersion);
+        verifyPersistCount(caseInstanceId);
+    }
+
+    private String annotatePayload(String payload, String entityType) {
         String annotatedPayload = payload;
         if (payload != null && om != null && annotator != null) {
             try {
@@ -51,7 +71,10 @@ public class CaseDataPersistService {
                 log.debug("Could not parse/annotate payload before persist: {}", ex.getMessage());
             }
         }
+        return annotatedPayload;
+    }
 
+    private int computeNextVersion(String caseInstanceId) {
         Integer currentMax = null;
         try {
             if (hasColumn("sys_case_data_store", "version")) {
@@ -62,22 +85,10 @@ public class CaseDataPersistService {
         } catch (Exception e) {
             log.debug("Could not read current version for {}: {}", caseInstanceId, e.getMessage());
         }
-        int nextVersion = (currentMax == null) ? 1 : (currentMax + 1);
+        return (currentMax == null) ? 1 : (currentMax + 1);
+    }
 
-        Timestamp now = new Timestamp(System.currentTimeMillis());
-        boolean hasStatus = hasColumn("sys_case_data_store", "status");
-        boolean hasError = hasColumn("sys_case_data_store", "error_message");
-        boolean hasVer = hasColumn("sys_case_data_store", "version");
-
-        // Delegate insert to writer
-        try {
-            writer.insertSysCaseData(caseInstanceId, entityType, annotatedPayload, now, hasStatus, hasError, hasVer, nextVersion);
-        } catch (Exception e) {
-            log.error("persistSysCaseData - insert failed for {}: {}", caseInstanceId, e.getMessage(), e);
-            throw e;
-        }
-
-        log.info("persisted sys_case_data_store for {} (version={})", caseInstanceId, nextVersion);
+    private void verifyPersistCount(String caseInstanceId) {
         try {
             Integer cnt = jdbc.queryForObject("SELECT COUNT(1) FROM sys_case_data_store WHERE case_instance_id = ?", Integer.class, caseInstanceId);
             log.info("verify persistSysCaseData: existing rows for {} = {}", caseInstanceId, cnt);

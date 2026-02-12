@@ -52,14 +52,13 @@ public class OrderController {
         try {
             Map<String, Object> vars = extractVars(body);
             boolean isCmmn = "cmmn".equalsIgnoreCase(type);
-            String id = isCmmn ? startCmmnCase(vars) : startBpmnProcess(vars);
+            String id = isCmmn ? OrderControllerHelpers.startCmmnCase(appCtx, vars) : startBpmnProcess(vars);
             String kind = isCmmn ? "case" : "process";
             return ResponseEntity.status(201).body(Map.of("id", id, "kind", kind));
         } catch (Exception ex) {
             return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
         }
     }
-
     /**
      * Convert incoming JSON to a variables map. Keeps the public API concise.
      */
@@ -151,47 +150,7 @@ public class OrderController {
     @GetMapping("/{caseInstanceId}/steps")
     public ResponseEntity<?> getCaseSteps(@PathVariable String caseInstanceId) {
         try {
-            List<Map<String, String>> out = new ArrayList<>();
-            org.flowable.engine.TaskService taskService = null;
-            try {
-                if (appCtx.containsBean("taskService")) {
-                    taskService = appCtx.getBean(org.flowable.engine.TaskService.class);
-                } else {
-                    for (String n : appCtx.getBeanDefinitionNames()) {
-                        if (n.toLowerCase().contains("taskservice")) {
-                            taskService = appCtx.getBean(n, org.flowable.engine.TaskService.class);
-                            break;
-                        }
-                    }
-                }
-            } catch (Exception e) { /* ignore */ }
-
-            if (taskService != null) {
-                List<org.flowable.task.api.Task> tasks = new ArrayList<>();
-                try {
-                    Object query = taskService.getClass().getMethod("createTaskQuery").invoke(taskService);
-                    java.lang.reflect.Method scopeIdM = query.getClass().getMethod("scopeId", String.class);
-                    Object q2 = scopeIdM.invoke(query, caseInstanceId);
-                    java.lang.reflect.Method listM = q2.getClass().getMethod("list");
-                    Object res = listM.invoke(q2);
-                    if (res instanceof List) tasks = (List) res;
-                } catch (Throwable ignored) {
-                    // Best-effort: if reflection fails, just return empty steps
-                }
-
-                for (var t : tasks) {
-                    Map<String, String> m = new HashMap<>();
-                    String key = null;
-                    try { key = t.getTaskDefinitionKey(); } catch (Throwable ignore) {}
-                    if (key == null || key.isBlank()) key = t.getId();
-                    m.put("id", t.getId());
-                    m.put("name", t.getName());
-                    m.put("taskDefinitionKey", key);
-                    m.put("image", "/steps/" + sanitize(key) + ".svg");
-                    out.add(m);
-                }
-            }
-
+            List<Map<String, String>> out = OrderControllerHelpers.getCaseSteps(appCtx, caseInstanceId);
             return ResponseEntity.ok(out);
         } catch (Exception ex) {
             return ResponseEntity.status(500).body(Map.of("error", ex.getMessage() == null ? ex.toString() : ex.getMessage()));
