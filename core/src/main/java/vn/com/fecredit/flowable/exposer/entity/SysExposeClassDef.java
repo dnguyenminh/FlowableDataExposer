@@ -1,6 +1,9 @@
 package vn.com.fecredit.flowable.exposer.entity;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.time.OffsetDateTime;
 
 /**
@@ -10,6 +13,7 @@ import java.time.OffsetDateTime;
  */
 @Entity
 @Table(name = "sys_expose_class_def")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SysExposeClassDef {
 
     @Id
@@ -17,25 +21,35 @@ public class SysExposeClassDef {
     private Long id;
 
     @Column(name = "class_name", nullable = false, length = 512)
+    @JsonProperty("className")
     private String className;
 
     @Column(name = "entity_type", nullable = false, length = 128)
+    @JsonProperty("entityType")
     private String entityType;
 
     @Column(name = "version", nullable = false)
+    @JsonProperty("version")
     private Integer version;
 
     @Lob
     @Column(name = "json_definition", nullable = false, columnDefinition = "CLOB")
+    @JsonProperty("jsonDefinition")
     private String jsonDefinition;
 
     @Column(name = "enabled")
+    @JsonProperty("enabled")
     private Boolean enabled = Boolean.TRUE;
 
     @Column(name = "created_at")
+    @JsonProperty("createdAt")
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
-    // getters / setters
+    // No-arg constructor required by Jackson and JPA
+    public SysExposeClassDef() {
+    }
+
+    // ...existing code...
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getClassName() { return className; }

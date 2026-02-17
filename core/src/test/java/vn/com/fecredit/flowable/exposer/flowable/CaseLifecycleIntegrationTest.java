@@ -15,7 +15,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @org.junit.jupiter.api.Disabled("canonical integration test present in repo-level src/test/java — see that copy")
-@SpringBootTest
+@SpringBootTest(classes = vn.com.fecredit.flowable.exposer.FlowableExposerTestApplicationFinal.class)
 class CaseLifecycleIntegrationTest {
 
     // Disabled duplicate; canonical test lives under the repo-level test tree (to ensure Boot config is discovered).

@@ -1,6 +1,7 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
@@ -69,7 +70,7 @@ public final class MetadataResolveEngine {
     private MetadataDefinition loadDefinitionForCandidates(List<String> candidates) {
         for (String cand : candidates) {
             try {
-                Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(cand);
+                Optional<SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(cand);
                 if (dbDef.isPresent()) return mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
             } catch (Exception ex) {
                 // ignore and continue
@@ -95,7 +96,7 @@ public final class MetadataResolveEngine {
                     addDiagnostic(diagnostics, md._class, "circular parent reference detected: " + cur.parent + " (referenced by " + cur._class + ")");
                     break;
                 }
-                Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> pdb = repo.findByClassNameOrderByVersionDesc(cur.parent).stream().findFirst();
+                Optional<SysExposeClassDef> pdb = repo.findByClassNameOrderByVersionDesc(cur.parent).stream().findFirst();
                 if (pdb.isPresent()) {
                     cur = mapper.readValue(pdb.get().getJsonDefinition(), MetadataDefinition.class);
                 } else {
@@ -122,7 +123,7 @@ public final class MetadataResolveEngine {
                 }
                 MetadataDefinition mixin = resourceLoader.getByClass(mixinName).orElse(null);
                 if (mixin == null) {
-                    Optional<vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef> mdb = repo.findByClassNameOrderByVersionDesc(mixinName).stream().findFirst();
+                    Optional<SysExposeClassDef> mdb = repo.findByClassNameOrderByVersionDesc(mixinName).stream().findFirst();
                     if (mdb.isPresent()) mixin = mapper.readValue(mdb.get().getJsonDefinition(), MetadataDefinition.class);
                 }
                 if (mixin == null || mixin.mappings == null) continue;

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Metadata Field-Check (Admin)</title>
+  <style>
+    :root{--bg:#f7fafc;--card:#fff;--muted:#6b7280;--accent:#0f62fe}
+    body{font-family:Inter,Segoe UI,Arial;margin:12px;color:#111;background:var(--bg)}
+    h1{font-size:20px;margin-bottom:6px}
+    .layout{display:flex;gap:16px;flex-wrap:wrap}
+    .col{flex:1;min-width:280px;background:var(--card);padding:14px;border-radius:8px;box-shadow:0 6px 18px rgba(2,6,23,0.06)}
+    textarea{width:100%;min-height:180px;font-family:monospace;font-size:13px;padding:10px;border:1px solid #e6eef6;border-radius:6px}
+    button{margin:6px 6px 0 0;padding:8px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer}
+    button.secondary{background:#f3f4f6;color:#111}
+    pre{background:#fbfdff;padding:12px;border-radius:6px;overflow:auto;border:1px solid #eef2ff}
+    .small{font-size:13px;color:var(--muted)}
+    .result-ok{color:green}
+    .result-err{color:#b02}
+    label.block{display:block;margin-top:8px;font-weight:600}
+    .status{margin-left:8px;font-weight:600}
+    .error{color:#b02;font-weight:600}
+    @media (max-width:800px){ .layout{flex-direction:column} }
+  </style>
+</head>
+<body>
+  <h1>Metadata Field‑Check — Admin (DEV)</h1>
+  <p class="small">Trang nhỏ để BA/Dev thử mapping (JsonPath) trên một sample blob, xem kết quả trích xuất và áp metadata vào hệ thống.</p>
+
+  <div class="layout">
+  <div class="col">
+      <label class="block">Metadata (JSON)</label>
+      <textarea id="metadata">{
+    "class": "Order",
+    "entityType": "Order",
+    "mappings": [
+      { "column": "total_amount", "jsonPath": "$.total", "exportToPlain": true, "plainColumn": "order_total" },
+      { "column": "customer_id", "jsonPath": "$.customer.id", "exportToPlain": true, "plainColumn": "customer_id" },
+      { "column": "customer_name", "jsonPath": "$.customer.name", "exportToPlain": true, "plainColumn": "customer_name" },
+      { "column": "priority", "jsonPath": "$.meta.priority", "exportToPlain": true, "plainColumn": "order_priority" },
+      { "column": "approval_status", "jsonPath": "$.approvalDecision.status", "exportToPlain": true, "plainColumn": "approval_status" },
+      { "column": "decision_reason", "jsonPath": "$.approvalDecision.reason", "exportToPlain": true, "plainColumn": "decision_reason" },
+      { "column": "item_1_id", "jsonPath": "$.items[0].id" }
+    ]
+  }</textarea>
+
+      <div style="margin-top:8px">
+        <button id="btn-validate">Validate metadata</button>
+        <button id="btn-apply">Apply (save to DB)</button>
+        <span id="validate-status"></span>
+      </div>
+
+      <label class="block">Sample Blob (JSON)</label>
+      <textarea id="sample">{
+    "total": 123.45,
+    "items": [{ "id": "item-xyz" }],
+    "params": { "color": "red" }
+  }</textarea>
+
+      <div style="margin-top:8px">
+        <button id="btn-field-check">Field‑Check (preview extraction)</button>
+        <span id="field-status"></span>
+      </div>
+
+      <label class="block">Field‑Check Result</label>
+      <pre id="field-result">(no result)</pre>
+    </div>
+
+    <div class="col">
+    <label class="block">Quick mapping editor</label>
+    <div class="small">Edit mappings manually (one per line): <code>column|jsonPath|exportToPlain|plainColumn</code></div>
+    <textarea id="mappings">total_amount|$.total|true|order_total
+item_1_id|$.items[0].id|false|
+</textarea>
+    <div style="margin-top:8px">
+      <button id="btn-sync-from-metadata">Sync → Mappings</button>
+      <button id="btn-sync-to-metadata">Sync ← Mappings</button>
+    </div>
+
+    <label class="block">Preview generated plain payload (JSON)</label>
+    <pre id="plain-preview">(no preview)</pre>
+
+    <hr />
+    <div class="small">Access this page at <code>/admin/metadata-ui.html</code>. This UI is for dev/BA only — protect behind auth in production.</div>
+  </div>
+
+<script>
+// Client-side helpers: validation, field-check and apply with user-friendly errors
+const elValidate = document.getElementById('btn-validate');
+const elApply = document.getElementById('btn-apply');
+const elField = document.getElementById('btn-field-check');
+const elMetadata = document.getElementById('metadata');
+const elSample = document.getElementById('sample');
+const elResult = document.getElementById('field-result');
+const statusEl = document.getElementById('validate-status');
+
+function parseJsonSafe(text){
+  try{ return {ok:true,json:JSON.parse(text)} }catch(e){ return {ok:false,error:e.message} }
+}
+
+elField?.addEventListener('click', async () => {
+  elResult.textContent = '';
+  const s = parseJsonSafe(elSample.value);
+  const m = parseJsonSafe(elMetadata.value);
+  if(!s.ok){ elResult.textContent = 'Sample JSON error: ' + s.error; return }
+  if(!m.ok){ elResult.textContent = 'Metadata JSON error: ' + m.error; return }
+  const payload = { sampleBlob: s.json, mappings: null, class: m.json.class || m.json._class };
+  try{
+    const res = await fetch('/api/metadata/field-check', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    const j = await res.json();
+    elResult.textContent = JSON.stringify(j, null, 2);
+  }catch(e){ elResult.textContent = 'Request error: ' + e }
+});
+
+elValidate?.addEventListener('click', async ()=>{
+  statusEl.textContent = '';
+  const m = parseJsonSafe(elMetadata.value);
+  if(!m.ok){ statusEl.textContent = 'Invalid JSON: ' + m.error; statusEl.className='error'; return }
+  try{
+    const res = await fetch('/api/metadata/validate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: elMetadata.value });
+    const j = await res.json();
+    statusEl.textContent = j.valid ? 'OK' : ('ERR: ' + (j.message||JSON.stringify(j)) );
+    statusEl.className = j.valid ? 'result-ok' : 'result-err';
+  }catch(e){ statusEl.textContent = 'Error: ' + e; statusEl.className='error' }
+});
+
+elApply?.addEventListener('click', async ()=>{
+  const m = parseJsonSafe(elMetadata.value);
+  if(!m.ok){ alert('Metadata JSON invalid: ' + m.error); return }
+  // require class or entityType
+  const obj = m.json;
+  if(!obj.class && !obj._class){ alert('Metadata must include "class" or "_class"'); return }
+  if(!obj.entityType){ if(!confirm('No entityType provided — continue?')) return }
+  try{
+    const res = await fetch('/api/metadata/apply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: elMetadata.value });
+    const j = await res.json();
+    if(res.ok) alert('Imported: ' + (j.imported || JSON.stringify(j)) );
+    else alert('Apply failed: ' + (j.error || JSON.stringify(j)));
+  }catch(e){ alert('Error: ' + e) }
+});
+</script>
+</body>
+</html>

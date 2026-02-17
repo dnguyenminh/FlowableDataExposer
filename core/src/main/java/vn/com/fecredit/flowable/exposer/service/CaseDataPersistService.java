@@ -7,7 +7,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 
 import java.sql.Timestamp;
 import java.util.List;
@@ -131,7 +130,7 @@ public class CaseDataPersistService {
     public void updateCaseInstanceIdForRecent(String newCaseInstanceId, java.time.Duration lookback) {
         try {
             java.time.Instant cutoff = java.time.Instant.now().minus(lookback == null ? java.time.Duration.ofSeconds(5) : lookback);
-            java.sql.Timestamp cutoffTs = java.sql.Timestamp.from(cutoff);
+            Timestamp cutoffTs = Timestamp.from(cutoff);
             String sql = "UPDATE sys_case_data_store SET case_instance_id = ? WHERE created_at >= ? AND case_instance_id <> ?";
             int updated = jdbc.update(sql, newCaseInstanceId, cutoffTs, newCaseInstanceId);
             log.info("updateCaseInstanceIdForRecent: updated {} rows to caseInstanceId={}", updated, newCaseInstanceId);

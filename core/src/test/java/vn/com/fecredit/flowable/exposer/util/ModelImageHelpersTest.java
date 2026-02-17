@@ -80,7 +80,9 @@ public class ModelImageHelpersTest {
         try {
             g.setColor(Color.WHITE);
             g.fillRect(0, 0, img.getWidth(), img.getHeight());
-            img.setRGB(50, 30, Color.BLACK.getRGB());
+            // Fill a rectangle with dark pixels to make it not mostly blank (>2% dark)
+            g.setColor(Color.BLACK);
+            g.fillRect(0, 0, 50, 50);
         } finally {
             g.dispose();
         }

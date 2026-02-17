@@ -3,6 +3,8 @@ plugins {
   id 'io.spring.dependency-management' version '1.1.0'
 }
 
+import org.gradle.api.file.DuplicatesStrategy
+
 group = 'vn.com.fecredit.chunkedupload'
 version = '1.0-SNAPSHOT'
 
@@ -16,33 +18,34 @@ repositories { mavenCentral() }
 
 dependencies {
   api 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+  api 'com.networknt:json-schema-validator:3.0.0'
+  api 'com.fasterxml.jackson.module:jackson-module-jsonSchema:2.15.2'
   api 'com.jayway.jsonpath:json-path:2.9.0'
   api 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+  api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
   // Flowable engine pieces used by core services
-  api 'org.flowable:flowable-dmn-engine:7.2.0'
-  api 'org.flowable:flowable-spring-boot-starter:7.2.0'
-
+  implementation "org.flowable:flowable-dmn-engine:${flowableVersion}"
+  implementation "org.flowable:flowable-spring-boot-starter:${flowableVersion}"
   // Image/renderer + converters (used by ModelValidatorRenderer)
-  implementation 'org.flowable:flowable-image-generator:7.2.0'
-  implementation 'org.flowable:flowable-cmmn-image-generator:7.2.0'
-  implementation 'org.flowable:flowable-dmn-image-generator:7.2.0'
-  implementation 'org.flowable:flowable-cmmn-converter:7.2.0'
-  implementation 'org.flowable:flowable-dmn-xml-converter:7.2.0'
+  implementation "org.flowable:flowable-image-generator:${flowableVersion}"
+  implementation "org.flowable:flowable-cmmn-image-generator:${flowableVersion}"
+  implementation "org.flowable:flowable-dmn-image-generator:${flowableVersion}"
+  implementation "org.flowable:flowable-cmmn-converter:${flowableVersion}"
+  implementation "org.flowable:flowable-dmn-xml-converter:${flowableVersion}"
 
   implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+  // Needed because core's sourceSets reference canonical web controllers during migration
+  implementation 'org.springframework.boot:spring-boot-starter-web'
 
-  runtimeOnly 'com.h2database:h2:1.4.200'
+  runtimeOnly 'com.h2database:h2'
 
-  testImplementation platform('org.junit:junit-bom:5.10.0')
-  testImplementation 'org.junit.jupiter:junit-jupiter'
   testImplementation 'org.springframework.boot:spring-boot-starter-test'
-  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 dependencyManagement {
   imports {
-    mavenBom 'org.springframework.boot:spring-boot-dependencies:3.2.6'
+    mavenBom 'org.springframework.boot:spring-boot-dependencies:3.5.10'
   }
 }
 
@@ -52,24 +55,23 @@ sourceSets {
     java {
       // compile module-local core sources first, then fall back to the canonical
       // repo tree during the incremental migration.
-      srcDirs = ['src/main/java', '../src/main/java']
-      exclude 'vn/com/fecredit/flowable/exposer/web/**'
+      srcDirs = ['src/main/java']
+      // Allow web controller shims during test compilation
     }
     resources {
       // tests in core rely on some resources (keep pointing to repo resources)
-      srcDirs = ['../src/main/resources']
-      exclude 'static/**'
+      srcDirs = ['src/main/resources']
     }
   }
   test {
-    java.srcDirs = ['../src/test/java']
-    resources.srcDirs = ['../src/test/resources']
+    // Include both the canonical test tree and the module-local tests during migration
+    java.srcDirs = ['src/test/java']
+    resources {
+      // Include both the canonical test tree and the module-local tests during migration
+      srcDirs = ['src/test/resources']
+    }
     java {
-      // exclude web-controller tests (they belong to web)
-      exclude 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
-              'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
-              'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
-              'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
+      // Exclude web-controller tests (they belong in web module)
     }
   }
 }
@@ -79,4 +81,17 @@ sourceSets {
 tasks.withType(Test).configureEach {
   // exclude the legacy placeholder filename from core test compilation
   exclude '**/MetadataControllerTest_LegacyPlaceholder.java'
+}
+
+tasks.processTestResources {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+// Force H2 to the requested latest version across all configurations. Using
+// `configureEach` avoids eager configuration of all configurations during the
+// configuration phase.
+configurations.configureEach {
+  resolutionStrategy {
+    force "com.h2database:h2:${h2Version}"
+  }
 }

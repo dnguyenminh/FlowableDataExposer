@@ -19,7 +19,7 @@ public final class CasePersistHelpers {
                 Object v = e.getValue();
                 if (v instanceof Map) dst.put(e.getKey(), new HashMap<>((Map<?, ?>) v));
                 else if (v instanceof Iterable) {
-                    List<Object> lst = new java.util.ArrayList<>();
+                    List<Object> lst = new ArrayList<>();
                     for (Object it : (Iterable<?>) v) lst.add(it instanceof Map ? new HashMap<>((Map<?, ?>) it) : it);
                     dst.put(e.getKey(), lst);
                 } else dst.put(e.getKey(), v);

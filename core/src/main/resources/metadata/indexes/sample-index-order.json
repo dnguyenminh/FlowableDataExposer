@@ -1,0 +1,11 @@
+{
+  "class": "Order",
+  "description": "Sample index rule for Order plain fields",
+  "table": "case_plain_order",
+  "exportMode": "plain",
+  "mappings": [
+    { "jsonPath": "$.total", "plainColumn": "total_amount", "type": "decimal", "nullable": true },
+    { "jsonPath": "$.shippingFee", "plainColumn": "shipping_fee", "type": "decimal", "nullable": true },
+    { "jsonPath": "$.businessKey", "plainColumn": "business_key", "type": "string", "nullable": true }
+  ]
+}

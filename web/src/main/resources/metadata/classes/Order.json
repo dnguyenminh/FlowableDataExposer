@@ -5,16 +5,13 @@
   "version": 1,
   "enabled": true,
   "description": "Order example mappings",
-  "mappings": [
-    { "column": "total_amount", "jsonPath": "$.total", "type": "decimal", "nullable": false, "exportToPlain": true, "plainColumn": "order_total" },
-    { "column": "customer_id", "class": "Customer", "jsonPath": "$.customer", "type": "string", "exportToPlain": true, "plainColumn": "customer_id" },
-    { "column": "customer_name", "class": "Customer", "jsonPath": "$.name", "type": "string", "exportToPlain": true, "plainColumn": "customer_name" },
-    { "column": "priority", "class": "Meta", "jsonPath": "$.meta.priority", "type": "string", "exportToPlain": true, "plainColumn": "order_priority" },
-    { "column": "approval_status", "class": "ApprovalDecision", "jsonPath": "$.status", "type": "string", "exportToPlain": true, "plainColumn": "approval_status" },
-    { "column": "decision_reason", "class": "ApprovalDecision", "jsonPath": "$.reason", "type": "string", "exportToPlain": true, "plainColumn": "decision_reason" },
-    { "column": "discount", "class": "OrderRules", "jsonPath": "$.discount", "type": "decimal", "exportToPlain": true, "plainColumn": "discount" },
-    { "column": "shipping_fee", "class": "OrderRules", "jsonPath": "$.shippingFee", "type": "decimal", "exportToPlain": true, "plainColumn": "shipping_fee" },
-    { "column": "item_1_id", "class": "Item", "jsonPath": "$.id", "arrayIndex": 0, "type": "string" },
-    { "column": "color_attr", "class": "Params", "jsonPath": "$.color", "type": "string", "nullable": true }
+  "fields": [
+    { "name": "total", "jsonPath": "$.total", "type": "decimal" },
+    { "name": "customer", "jsonPath": "$.customer", "type": "object", "class": "Customer" },
+    { "name": "meta", "jsonPath": "$.meta", "type": "object", "class": "Meta" },
+    { "name": "approvalDecision", "jsonPath": "$.approvalDecision", "type": "object", "class": "ApprovalDecision" },
+    { "name": "orderRules", "jsonPath": "$.orderRules", "type": "object", "class": "OrderRules" },
+    { "name": "items", "jsonPath": "$.items", "type": "listObject", "class": "Item" },
+    { "name": "params", "jsonPath": "$.params", "type": "object", "class": "Params" }
   ]
 }

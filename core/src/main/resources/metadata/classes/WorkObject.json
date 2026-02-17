@@ -1,6 +1,8 @@
 {
+  "$schema": "/metadata/work-class-schema.json",
   "class": "WorkObject",
   "parent": "FlowableObject",
+  "tableName": "DefaultWorkObject",
   "description": "Case-instance (CMMN) canonical fields (inherits audit from FlowableObject)",
   "jsonPath": "$",
   "fields": [

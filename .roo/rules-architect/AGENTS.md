@@ -1,6 +1,7 @@
 # AGENTS.md — architect mode (non-obvious constraints)
 
-- sys_case_data_store is the permanent Source-of-Truth; indexes are derived and can be regenerated. Never rely on index tables for authoritative data.
-- Metadata resolution precedence is deterministic and audited. Adding mixins or parent mappings can silently override columns—review resolved mappings before applying DDL.
-- Re-indexing is the supported upgrade path for exposing new properties on historical data; implement changes against the blob store workflow not by mutating blobs.
-- Performance: CaseDataWorker is designed for high-throughput with virtual threads and batch DB writes; avoid introducing blocking synchronous calls that will bottleneck re-index operations.
+- Design constraint: `sys_case_data_store` is immutable; all derived index tables are rebuildable from it — never rely on in-place blob edits.
+- Backfill must be idempotent and chunked. Use `CaseDataWorker` pattern with short transactions per batch; record progress to `sys_expose_index_job` to allow resume/retry.
+- Schema rollout: create new columns before backfilling. Use `MetadataDdlGenerator` to emit ALTER statements; include DDL in `migrations/` for CI reproducibility.
+- Metadata precedence rules (child > mixin last wins > parent) are deterministic and enforced by `MetadataResolveEngine`. Type conflicts must surface as diagnostics in CI strict mode.
+- Performance: metadata lookup uses a cache; avoid expensive metadata queries during hot paths — use `MetadataResolver` caching helpers.

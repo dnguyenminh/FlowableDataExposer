@@ -1,7 +1,6 @@
 package vn.com.fecredit.flowable.exposer.util;
 
 import javax.xml.XMLConstants;
-import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.Schema;
@@ -63,7 +62,7 @@ public final class ModelConverterHelpers {
             if (xmlBytes != null) {
                 for (java.lang.reflect.Method method : convClass.getMethods()) {
                     if (method.getName().startsWith("convertTo") && method.getParameterCount() == 1
-                            && method.getParameterTypes()[0].isAssignableFrom(java.io.InputStream.class)) {
+                            && method.getParameterTypes()[0].isAssignableFrom(InputStream.class)) {
                         try {
                             return method.invoke(conv, new ByteArrayInputStream(xmlBytes));
                         } catch (java.lang.reflect.InvocationTargetException ite) {

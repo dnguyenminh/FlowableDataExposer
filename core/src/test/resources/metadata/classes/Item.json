@@ -1,4 +1,9 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "Item",
-  "jsonPath": "$.items"
+  "jsonPath": "$",
+  "fields": [
+    { "name": "id", "jsonPath": "$.id", "type": "string" },
+    { "name": "sku", "jsonPath": "$.sku", "type": "string" }
+  ]
 }

@@ -6,11 +6,12 @@ import org.flowable.engine.delegate.JavaDelegate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
-import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
+import vn.com.fecredit.flowable.exposer.service.RequestPersistService;
 
 import java.util.Map;
 
@@ -37,7 +38,7 @@ public class CasePersistDelegate implements JavaDelegate {
     private CaseDataPersistService persistService;
 
     @Autowired
-    private vn.com.fecredit.flowable.exposer.service.RequestPersistService requestPersistService;
+    private RequestPersistService requestPersistService;
 
     @Override
     public void execute(DelegateExecution execution) {

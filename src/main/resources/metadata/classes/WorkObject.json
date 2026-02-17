@@ -1,0 +1,13 @@
+{
+  "class": "WorkObject",
+  "entityType": "WorkObject",
+  "description": "Case-instance (CMMN) canonical fields",
+  "fields": [
+    { "name": "id", "jsonPath": "$.id", "type": "string" },
+    { "name": "title", "jsonPath": "$.title", "type": "string" }
+  ]
+}
+
+
+
+

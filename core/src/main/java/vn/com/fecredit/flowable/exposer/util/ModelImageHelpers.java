@@ -88,16 +88,23 @@ public final class ModelImageHelpers {
         int stepX = Math.max(1, w / 200);
         int stepY = Math.max(1, h / 120);
         long blank = 0;
+        long total = 0;
         for (int y = 0; y < h; y += stepY) {
             for (int x = 0; x < w; x += stepX) {
                 int rgb = img.getRGB(x, y);
                 int r = (rgb >> 16) & 0xff;
                 int g = (rgb >> 8) & 0xff;
                 int b = (rgb) & 0xff;
+                // Count pixels that are mostly white (blank/background)
                 if (r > 240 && g > 240 && b > 240) blank++;
+                total++;
             }
         }
-        double ratio = (double) blank / ((w / stepX) * (h / stepY));
-        return ratio > 0.98d;
+        // If no samples taken, assume blank
+        if (total == 0) return true;
+        double ratio = (double) blank / total;
+        // Return true only if at least 99% of sampled pixels are white
+        // This means even a single dark pixel in a small image will make it non-blank
+        return ratio > 0.99d;
     }
 }

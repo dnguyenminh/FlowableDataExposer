@@ -6,15 +6,10 @@ import org.flowable.common.engine.api.delegate.event.FlowableEntityEvent;
 import org.flowable.task.api.Task;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import vn.com.fecredit.flowable.exposer.entity.SysExposeRequest;
-import vn.com.fecredit.flowable.exposer.repository.SysExposeRequestRepository;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -23,23 +18,20 @@ class GlobalFlowableEventListenerTest {
     @InjectMocks
     private GlobalFlowableEventListener listener;
 
-    @Mock
-    private SysExposeRequestRepository reqRepo;
+    @Mock(lenient = true)
+    private TaskExposeHandler taskExposeHandler;
 
-    @Mock
+    @Mock(lenient = true)
     private FlowableEntityEvent entityEvent;
 
-    @Mock
+    @Mock(lenient = true)
     private Task task;
-
-    @Captor
-    ArgumentCaptor<SysExposeRequest> reqCaptor;
 
     @Test
     void onEvent_null_isNoop() {
         // should not throw
         listener.onEvent(null);
-        verifyNoInteractions(reqRepo);
+        verifyNoInteractions(taskExposeHandler);
     }
 
     @Test
@@ -47,7 +39,7 @@ class GlobalFlowableEventListenerTest {
         FlowableEvent ev = mock(FlowableEvent.class);
         when(ev.getType()).thenReturn(FlowableEngineEventType.ENTITY_CREATED);
         listener.onEvent(ev);
-        verifyNoInteractions(reqRepo);
+        verifyNoInteractions(taskExposeHandler);
     }
 
     @Test
@@ -55,34 +47,29 @@ class GlobalFlowableEventListenerTest {
         when(entityEvent.getEntity()).thenReturn(new Object());
         when(entityEvent.getType()).thenReturn(FlowableEngineEventType.ENTITY_CREATED);
         listener.onEvent(entityEvent);
-        verifyNoInteractions(reqRepo);
+        verifyNoInteractions(taskExposeHandler);
     }
 
     @Test
-    void onEvent_taskCompleted_withScope_savesRequest() {
+    void onEvent_taskCompleted_withScope_callsHandler() {
         when(entityEvent.getEntity()).thenReturn(task);
         when(entityEvent.getType()).thenReturn(FlowableEngineEventType.TASK_COMPLETED);
-        when(task.getScopeId()).thenReturn("case-1");
-        when(task.getScopeDefinitionId()).thenReturn("orderProcess:1:abcd");
-        when(task.getAssignee()).thenReturn("joe");
 
         listener.onEvent(entityEvent);
 
-        verify(reqRepo).save(reqCaptor.capture());
-        SysExposeRequest saved = reqCaptor.getValue();
-        assertThat(saved.getCaseInstanceId()).isEqualTo("case-1");
-        assertThat(saved.getEntityType()).isEqualTo("orderProcess");
-        assertThat(saved.getRequestedBy()).isEqualTo("joe");
+        verify(taskExposeHandler).handle(task, FlowableEngineEventType.TASK_COMPLETED);
     }
 
     @Test
-    void onEvent_taskCompleted_missingScope_noSave() {
+    void onEvent_taskCompleted_missingScope_callsHandler() {
         when(entityEvent.getEntity()).thenReturn(task);
         when(entityEvent.getType()).thenReturn(FlowableEngineEventType.TASK_COMPLETED);
-        when(task.getScopeId()).thenReturn(null);
 
         listener.onEvent(entityEvent);
 
-        verifyNoInteractions(reqRepo);
+        verify(taskExposeHandler).handle(task, FlowableEngineEventType.TASK_COMPLETED);
     }
 }
+
+
+

@@ -1,5 +1,7 @@
+import org.springframework.boot.gradle.tasks.run.BootRun
+
 plugins {
-  id 'org.springframework.boot' version '3.2.6'
+  id 'org.springframework.boot' version '3.5.10'
   id 'io.spring.dependency-management' version '1.1.0'
   id 'java'
 }
@@ -18,12 +20,11 @@ dependencies {
   implementation 'org.springframework.boot:spring-boot-starter'
   implementation 'org.springframework.boot:spring-boot-starter-web'
   implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-  implementation 'org.flowable:flowable-spring-boot-starter:7.2.0'
+  implementation "org.flowable:flowable-spring-boot-starter:${flowableVersion}"
+  // JSON Schema validator used by MetadataController for strict validation
+  implementation 'com.networknt:json-schema-validator:3.0.0'
 
-  testImplementation platform('org.junit:junit-bom:5.10.0')
-  testImplementation 'org.junit.jupiter:junit-jupiter'
   testImplementation 'org.springframework.boot:spring-boot-starter-test'
-  testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
 }
 
 sourceSets {
@@ -60,12 +61,20 @@ tasks.processResources {
 }
 
 bootJar {
-  mainClass = 'vn.com.fecredit.flowable.exposer.ComplexSampleApplication'
+  mainClass = 'vn.com.fecredit.complexsample.ComplexSampleApplication'
 }
 
 // Explicitly set the BootRun main class to avoid ambiguity when multiple @SpringBootApplication
 // classes (e.g. MetadataImporterApplication) are present on the classpath.
-tasks.named('bootRun', org.springframework.boot.gradle.tasks.run.BootRun) {
-  mainClass.set('vn.com.fecredit.flowable.exposer.ComplexSampleApplication')
+tasks.named('bootRun', BootRun) {
+  mainClass.set('vn.com.fecredit.complexsample.ComplexSampleApplication')
 }
-// end of build file
+
+// Force H2 to the requested latest version across all configurations. Using
+// `configureEach` avoids eager configuration of all configurations during the
+// configuration phase.
+configurations.configureEach {
+  resolutionStrategy {
+    force "com.h2database:h2:${h2Version}"
+  }
+}

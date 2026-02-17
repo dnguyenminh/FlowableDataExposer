@@ -8,7 +8,7 @@
     <resource url="http://flowable.org/cmmn" location="$PROJECT_DIR$/bin/main/xsd/flowable-cmmn.xsd" />
     <resource url="http://flowable.org/design" location="$PROJECT_DIR$/bin/main/xsd/flowable-design.xsd" />
   </component>
-  <component name="ProjectRootManager" version="2" languageLevel="JDK_21" default="true" project-jdk-name="zulu-21" project-jdk-type="JavaSDK">
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_21" default="true" project-jdk-name="21" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/out" />
   </component>
 </project>

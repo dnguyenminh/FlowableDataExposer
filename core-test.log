@@ -1,0 +1,533 @@
+Initialized native services in: /home/ducnm/.gradle/native
+Initialized jansi services in: /home/ducnm/.gradle/native
+The client will now receive all logging from the daemon (pid: 2449742). The daemon log file: /home/ducnm/.gradle/daemon/8.14/daemon-2449742.out.log
+Starting 3rd build in daemon [uptime: 9 mins 25.636 secs, performance: 98%, GC rate: 0.00/s, heap usage: 2% of 512 MiB, non-heap usage: 20% of 384 MiB]
+Using 24 worker leases.
+Now considering [/home/ducnm/projects/java/FlowableDataExposer] as hierarchies to watch
+Watching the file system is configured to be enabled if available
+File system watching is active
+Starting Build
+Settings evaluated using settings file '/home/ducnm/projects/java/FlowableDataExposer/settings.gradle'.
+Projects loaded. Root project using build file '/home/ducnm/projects/java/FlowableDataExposer/build.gradle'.
+Included projects: [root project 'FlowableDataExposer', project ':complexSample', project ':core', project ':web']
+
+> Configure project :
+Evaluating root project 'FlowableDataExposer' using build file '/home/ducnm/projects/java/FlowableDataExposer/build.gradle'.
+Resolved plugin [id: 'java']
+
+> Configure project :complexSample
+Evaluating project ':complexSample' using build file '/home/ducnm/projects/java/FlowableDataExposer/complexSample/build.gradle'.
+Resolved plugin [id: 'org.springframework.boot', version: '3.5.10']
+Resolved plugin [id: 'io.spring.dependency-management', version: '1.1.0']
+Resolved plugin [id: 'java']
+Applying dependency management to configuration 'annotationProcessor' in project 'complexSample'
+Applying dependency management to configuration 'apiElements' in project 'complexSample'
+Applying dependency management to configuration 'archives' in project 'complexSample'
+Applying dependency management to configuration 'bootArchives' in project 'complexSample'
+Applying dependency management to configuration 'checkstyle' in project 'complexSample'
+Applying dependency management to configuration 'compileClasspath' in project 'complexSample'
+Applying dependency management to configuration 'compileOnly' in project 'complexSample'
+Applying dependency management to configuration 'default' in project 'complexSample'
+Applying dependency management to configuration 'developmentOnly' in project 'complexSample'
+Applying dependency management to configuration 'implementation' in project 'complexSample'
+Applying dependency management to configuration 'mainSourceElements' in project 'complexSample'
+Applying dependency management to configuration 'productionRuntimeClasspath' in project 'complexSample'
+Applying dependency management to configuration 'runtimeClasspath' in project 'complexSample'
+Applying dependency management to configuration 'runtimeElements' in project 'complexSample'
+Applying dependency management to configuration 'runtimeOnly' in project 'complexSample'
+Applying dependency management to configuration 'testAndDevelopmentOnly' in project 'complexSample'
+Applying dependency management to configuration 'testAnnotationProcessor' in project 'complexSample'
+Applying dependency management to configuration 'testCompileClasspath' in project 'complexSample'
+Applying dependency management to configuration 'testCompileOnly' in project 'complexSample'
+Applying dependency management to configuration 'testImplementation' in project 'complexSample'
+Applying dependency management to configuration 'testResultsElementsForTest' in project 'complexSample'
+Applying dependency management to configuration 'testRuntimeClasspath' in project 'complexSample'
+Applying dependency management to configuration 'testRuntimeOnly' in project 'complexSample'
+
+> Configure project :core
+Evaluating project ':core' using build file '/home/ducnm/projects/java/FlowableDataExposer/core/build.gradle'.
+Resolved plugin [id: 'java-library']
+Resolved plugin [id: 'io.spring.dependency-management', version: '1.1.0']
+Applying dependency management to configuration 'annotationProcessor' in project 'core'
+Applying dependency management to configuration 'api' in project 'core'
+Applying dependency management to configuration 'apiElements' in project 'core'
+Applying dependency management to configuration 'archives' in project 'core'
+Applying dependency management to configuration 'checkstyle' in project 'core'
+Applying dependency management to configuration 'compileClasspath' in project 'core'
+Applying dependency management to configuration 'compileOnly' in project 'core'
+Applying dependency management to configuration 'compileOnlyApi' in project 'core'
+Applying dependency management to configuration 'default' in project 'core'
+Applying dependency management to configuration 'implementation' in project 'core'
+Applying dependency management to configuration 'mainSourceElements' in project 'core'
+Applying dependency management to configuration 'runtimeClasspath' in project 'core'
+Applying dependency management to configuration 'runtimeElements' in project 'core'
+Applying dependency management to configuration 'runtimeOnly' in project 'core'
+Applying dependency management to configuration 'testAnnotationProcessor' in project 'core'
+Applying dependency management to configuration 'testCompileClasspath' in project 'core'
+Applying dependency management to configuration 'testCompileOnly' in project 'core'
+Applying dependency management to configuration 'testImplementation' in project 'core'
+Applying dependency management to configuration 'testResultsElementsForTest' in project 'core'
+Applying dependency management to configuration 'testRuntimeClasspath' in project 'core'
+Applying dependency management to configuration 'testRuntimeOnly' in project 'core'
+
+> Configure project :web
+Evaluating project ':web' using build file '/home/ducnm/projects/java/FlowableDataExposer/web/build.gradle'.
+Resolved plugin [id: 'org.springframework.boot', version: '3.5.10']
+Resolved plugin [id: 'io.spring.dependency-management', version: '1.1.0']
+Resolved plugin [id: 'java']
+Applying dependency management to configuration 'annotationProcessor' in project 'web'
+Applying dependency management to configuration 'apiElements' in project 'web'
+Applying dependency management to configuration 'archives' in project 'web'
+Applying dependency management to configuration 'bootArchives' in project 'web'
+Applying dependency management to configuration 'checkstyle' in project 'web'
+Applying dependency management to configuration 'compileClasspath' in project 'web'
+Applying dependency management to configuration 'compileOnly' in project 'web'
+Applying dependency management to configuration 'default' in project 'web'
+Applying dependency management to configuration 'developmentOnly' in project 'web'
+Applying dependency management to configuration 'implementation' in project 'web'
+Applying dependency management to configuration 'mainSourceElements' in project 'web'
+Applying dependency management to configuration 'productionRuntimeClasspath' in project 'web'
+Applying dependency management to configuration 'runtimeClasspath' in project 'web'
+Applying dependency management to configuration 'runtimeElements' in project 'web'
+Applying dependency management to configuration 'runtimeOnly' in project 'web'
+Applying dependency management to configuration 'testAndDevelopmentOnly' in project 'web'
+Applying dependency management to configuration 'testAnnotationProcessor' in project 'web'
+Applying dependency management to configuration 'testCompileClasspath' in project 'web'
+Applying dependency management to configuration 'testCompileOnly' in project 'web'
+Applying dependency management to configuration 'testImplementation' in project 'web'
+Applying dependency management to configuration 'testResultsElementsForTest' in project 'web'
+Applying dependency management to configuration 'testRuntimeClasspath' in project 'web'
+Applying dependency management to configuration 'testRuntimeOnly' in project 'web'
+All projects evaluated.
+Task path ':core:test' matched project ':core'
+Task name matched 'test'
+Selected primary task 'test' from project :core
+Tasks to be executed: [task ':core:compileJava', task ':core:processResources', task ':core:classes', task ':core:compileTestJava', task ':core:processTestResources', task ':core:testClasses', task ':core:test']
+Tasks that were excluded: []
+Resolve mutations for :core:compileJava (Thread[#732,Execution worker,5,main]) started.
+:core:compileJava (Thread[#732,Execution worker,5,main]) started.
+
+> Task :core:compileJava UP-TO-DATE
+Resolving global dependency management for project 'core'
+Excluding []
+Excluding []
+Caching disabled for task ':core:compileJava' because:
+  Build cache is disabled
+Skipping task ':core:compileJava' as it is up-to-date.
+Resolve mutations for :core:processResources (Thread[#732,Execution worker,5,main]) started.
+:core:processResources (Thread[#732,Execution worker,5,main]) started.
+
+> Task :core:processResources NO-SOURCE
+Skipping task ':core:processResources' as it has no source files and no previous output files.
+Resolve mutations for :core:classes (Thread[#732,Execution worker,5,main]) started.
+:core:classes (Thread[#736,Execution worker Thread 5,5,main]) started.
+
+> Task :core:classes UP-TO-DATE
+Skipping task ':core:classes' as it has no actions.
+Resolve mutations for :core:compileTestJava (Thread[#739,Execution worker Thread 8,5,main]) started.
+:core:compileTestJava (Thread[#739,Execution worker Thread 8,5,main]) started.
+
+> Task :core:compileTestJava FAILED
+Excluding []
+Excluding []
+Caching disabled for task ':core:compileTestJava' because:
+  Build cache is disabled
+Task ':core:compileTestJava' is not up-to-date because:
+  Task has failed previously.
+The input changes require a full rebuild for incremental task ':core:compileTestJava'.
+Compilation mode: in-process compilation
+Full recompilation is required because no incremental change information is available. This is usually caused by clean builds or changing compiler arguments.
+Compiling with toolchain '/home/ducnm/.sdkman/candidates/java/21.0.9-amzn'.
+file or directory '/home/ducnm/projects/java/FlowableDataExposer/src/test/java', not found
+Compiling with JDK Java compiler API.
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/MetadataAutoCreateColumnTest.java:22: error: cannot find symbol
+    CaseDataWorker worker;
+    ^
+  symbol:   class CaseDataWorker
+  location: class MetadataAutoCreateColumnTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/CaseDataWorkerTest.java:21: error: cannot find symbol
+    CaseDataWorker worker;
+    ^
+  symbol:   class CaseDataWorker
+  location: class CaseDataWorkerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/CaseDataPersistServiceIntegrationTest.java:18: error: cannot find symbol
+    CaseDataPersistService persistService;
+    ^
+  symbol:   class CaseDataPersistService
+  location: class CaseDataPersistServiceIntegrationTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/MetadataMixinE2eTest.java:19: error: cannot find symbol
+    CaseDataWorker worker;
+    ^
+  symbol:   class CaseDataWorker
+  location: class MetadataMixinE2eTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/flowable/GlobalFlowableEventListenerTest.java:24: error: cannot find symbol
+    private GlobalFlowableEventListener listener;
+            ^
+  symbol:   class GlobalFlowableEventListener
+  location: class GlobalFlowableEventListenerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CaseLifecycleListenerTest.java:21: error: cannot find symbol
+    private CaseLifecycleListener listener;
+            ^
+  symbol:   class CaseLifecycleListener
+  location: class CaseLifecycleListenerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:14: error: cannot find symbol
+import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+                                               ^
+  symbol:   class CaseDataPersistService
+  location: package vn.com.fecredit.flowable.exposer.service
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:29: error: cannot find symbol
+    private CasePersistDelegate delegate;
+            ^
+  symbol:   class CasePersistDelegate
+  location: class CasePersistDelegateTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:41: error: cannot find symbol
+    private CaseDataPersistService persistService;
+            ^
+  symbol:   class CaseDataPersistService
+  location: class CasePersistDelegateTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/web/MetadataControllerTest.java:15: error: cannot find symbol
+    MetadataController controller;
+    ^
+  symbol:   class MetadataController
+  location: class MetadataControllerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/web/IndexJobControllerTest.java:19: error: cannot find symbol
+    IndexJobController controller;
+    ^
+  symbol:   class IndexJobController
+  location: class IndexJobControllerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/MetadataControllerTest_LegacyPlaceholder.java:14: error: cannot find symbol
+@WebMvcTest(vn.com.fecredit.flowable.exposer.web.MetadataController.class)
+                                                ^
+  symbol:   class MetadataController
+  location: package vn.com.fecredit.flowable.exposer.web
+12 errors
+
+[Incubating] Problems report is available at: file:///home/ducnm/projects/java/FlowableDataExposer/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':core:compileTestJava'.
+> Compilation failed; see the compiler output below.
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/MetadataAutoCreateColumnTest.java:22: error: cannot find symbol
+      CaseDataWorker worker;
+      ^
+    symbol:   class CaseDataWorker
+    location: class MetadataAutoCreateColumnTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/CaseDataWorkerTest.java:21: error: cannot find symbol
+      CaseDataWorker worker;
+      ^
+    symbol:   class CaseDataWorker
+    location: class CaseDataWorkerTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/CaseDataPersistServiceIntegrationTest.java:18: error: cannot find symbol
+      CaseDataPersistService persistService;
+      ^
+    symbol:   class CaseDataPersistService
+    location: class CaseDataPersistServiceIntegrationTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/MetadataMixinE2eTest.java:19: error: cannot find symbol
+      CaseDataWorker worker;
+      ^
+    symbol:   class CaseDataWorker
+    location: class MetadataMixinE2eTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/flowable/GlobalFlowableEventListenerTest.java:24: error: cannot find symbol
+      private GlobalFlowableEventListener listener;
+              ^
+    symbol:   class GlobalFlowableEventListener
+    location: class GlobalFlowableEventListenerTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CaseLifecycleListenerTest.java:21: error: cannot find symbol
+      private CaseLifecycleListener listener;
+              ^
+    symbol:   class CaseLifecycleListener
+    location: class CaseLifecycleListenerTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:14: error: cannot find symbol
+  import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+                                                 ^
+    symbol:   class CaseDataPersistService
+    location: package vn.com.fecredit.flowable.exposer.service
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:29: error: cannot find symbol
+      private CasePersistDelegate delegate;
+              ^
+    symbol:   class CasePersistDelegate
+    location: class CasePersistDelegateTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:41: error: cannot find symbol
+      private CaseDataPersistService persistService;
+              ^
+    symbol:   class CaseDataPersistService
+    location: class CasePersistDelegateTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/web/MetadataControllerTest.java:15: error: cannot find symbol
+      MetadataController controller;
+      ^
+    symbol:   class MetadataController
+    location: class MetadataControllerTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/web/IndexJobControllerTest.java:19: error: cannot find symbol
+      IndexJobController controller;
+      ^
+    symbol:   class IndexJobController
+    location: class IndexJobControllerTest
+  /home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/MetadataControllerTest_LegacyPlaceholder.java:14: error: cannot find symbol
+  @WebMvcTest(vn.com.fecredit.flowable.exposer.web.MetadataController.class)
+                                                  ^
+    symbol:   class MetadataController
+    location: package vn.com.fecredit.flowable.exposer.web
+  12 errors
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to get full insights.
+
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':core:compileTestJava'.
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:293)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Compilation failed; see the compiler output below.
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/MetadataAutoCreateColumnTest.java:22: error: cannot find symbol
+    CaseDataWorker worker;
+    ^
+  symbol:   class CaseDataWorker
+  location: class MetadataAutoCreateColumnTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/CaseDataWorkerTest.java:21: error: cannot find symbol
+    CaseDataWorker worker;
+    ^
+  symbol:   class CaseDataWorker
+  location: class CaseDataWorkerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/CaseDataPersistServiceIntegrationTest.java:18: error: cannot find symbol
+    CaseDataPersistService persistService;
+    ^
+  symbol:   class CaseDataPersistService
+  location: class CaseDataPersistServiceIntegrationTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/service/MetadataMixinE2eTest.java:19: error: cannot find symbol
+    CaseDataWorker worker;
+    ^
+  symbol:   class CaseDataWorker
+  location: class MetadataMixinE2eTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/flowable/GlobalFlowableEventListenerTest.java:24: error: cannot find symbol
+    private GlobalFlowableEventListener listener;
+            ^
+  symbol:   class GlobalFlowableEventListener
+  location: class GlobalFlowableEventListenerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CaseLifecycleListenerTest.java:21: error: cannot find symbol
+    private CaseLifecycleListener listener;
+            ^
+  symbol:   class CaseLifecycleListener
+  location: class CaseLifecycleListenerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:14: error: cannot find symbol
+import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+                                               ^
+  symbol:   class CaseDataPersistService
+  location: package vn.com.fecredit.flowable.exposer.service
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:29: error: cannot find symbol
+    private CasePersistDelegate delegate;
+            ^
+  symbol:   class CasePersistDelegate
+  location: class CasePersistDelegateTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/delegate/CasePersistDelegateTest.java:41: error: cannot find symbol
+    private CaseDataPersistService persistService;
+            ^
+  symbol:   class CaseDataPersistService
+  location: class CasePersistDelegateTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/web/MetadataControllerTest.java:15: error: cannot find symbol
+    MetadataController controller;
+    ^
+  symbol:   class MetadataController
+  location: class MetadataControllerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/web/IndexJobControllerTest.java:19: error: cannot find symbol
+    IndexJobController controller;
+    ^
+  symbol:   class IndexJobController
+  location: class IndexJobControllerTest
+/home/ducnm/projects/java/FlowableDataExposer/core/src/test/java/vn/com/fecredit/flowable/exposer/MetadataControllerTest_LegacyPlaceholder.java:14: error: cannot find symbol
+@WebMvcTest(vn.com.fecredit.flowable.exposer.web.MetadataController.class)
+                                                ^
+  symbol:   class MetadataController
+  location: package vn.com.fecredit.flowable.exposer.web
+12 errors
+	at org.gradle.api.internal.tasks.compile.JdkJavaCompiler.execute(JdkJavaCompiler.java:89)
+	at org.gradle.api.internal.tasks.compile.JdkJavaCompiler.execute(JdkJavaCompiler.java:50)
+	at org.gradle.api.internal.tasks.compile.NormalizingJavaCompiler.delegateAndHandleErrors(NormalizingJavaCompiler.java:98)
+	at org.gradle.api.internal.tasks.compile.NormalizingJavaCompiler.execute(NormalizingJavaCompiler.java:52)
+	at org.gradle.api.internal.tasks.compile.NormalizingJavaCompiler.execute(NormalizingJavaCompiler.java:38)
+	at org.gradle.api.internal.tasks.compile.AnnotationProcessorDiscoveringCompiler.execute(AnnotationProcessorDiscoveringCompiler.java:52)
+	at org.gradle.api.internal.tasks.compile.AnnotationProcessorDiscoveringCompiler.execute(AnnotationProcessorDiscoveringCompiler.java:38)
+	at org.gradle.api.internal.tasks.compile.ModuleApplicationNameWritingCompiler.execute(ModuleApplicationNameWritingCompiler.java:46)
+	at org.gradle.api.internal.tasks.compile.ModuleApplicationNameWritingCompiler.execute(ModuleApplicationNameWritingCompiler.java:36)
+	at org.gradle.jvm.toolchain.internal.DefaultToolchainJavaCompiler.execute(DefaultToolchainJavaCompiler.java:57)
+	at org.gradle.api.tasks.compile.JavaCompile.lambda$createToolchainCompiler$3(JavaCompile.java:206)
+	at org.gradle.api.internal.tasks.compile.CleaningJavaCompiler.execute(CleaningJavaCompiler.java:53)
+	at org.gradle.api.internal.tasks.compile.incremental.IncrementalCompilerFactory.lambda$createRebuildAllCompiler$0(IncrementalCompilerFactory.java:55)
+	at org.gradle.api.internal.tasks.compile.incremental.SelectiveCompiler.execute(SelectiveCompiler.java:70)
+	at org.gradle.api.internal.tasks.compile.incremental.SelectiveCompiler.execute(SelectiveCompiler.java:44)
+	at org.gradle.api.internal.tasks.compile.incremental.IncrementalResultStoringCompiler.execute(IncrementalResultStoringCompiler.java:66)
+	at org.gradle.api.internal.tasks.compile.incremental.IncrementalResultStoringCompiler.execute(IncrementalResultStoringCompiler.java:52)
+	at org.gradle.api.internal.tasks.compile.CompileJavaBuildOperationReportingCompiler$1.call(CompileJavaBuildOperationReportingCompiler.java:64)
+	at org.gradle.api.internal.tasks.compile.CompileJavaBuildOperationReportingCompiler$1.call(CompileJavaBuildOperationReportingCompiler.java:48)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.compile.CompileJavaBuildOperationReportingCompiler.execute(CompileJavaBuildOperationReportingCompiler.java:48)
+	at org.gradle.api.tasks.compile.JavaCompile.performCompilation(JavaCompile.java:224)
+	at org.gradle.api.tasks.compile.JavaCompile.performIncrementalCompilation(JavaCompile.java:165)
+	at org.gradle.api.tasks.compile.JavaCompile.compile(JavaCompile.java:150)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at org.gradle.internal.reflect.JavaMethod.invoke(JavaMethod.java:125)
+	at org.gradle.api.internal.project.taskfactory.IncrementalTaskAction.doExecute(IncrementalTaskAction.java:45)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:51)
+	at org.gradle.api.internal.project.taskfactory.IncrementalTaskAction.execute(IncrementalTaskAction.java:26)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:29)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:244)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75)
+	at org.gradle.internal.Either$Right.fold(Either.java:175)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:61)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:64)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 1s
+2 actionable tasks: 1 executed, 1 up-to-date

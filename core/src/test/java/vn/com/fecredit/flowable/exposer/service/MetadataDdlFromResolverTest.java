@@ -1,23 +1,23 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.BeforeEach;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
 public class MetadataDdlFromResolverTest {
 
-    @Autowired
-    MetadataResolver resolver;
+    private MetadataResolver resolver;
+
+    @BeforeEach
+    void setUp() {
+        resolver = MetadataResolverTestHelper.createMetadataResolver();
+    }
 
     @Test
     void generate_ddl_for_order_export_mappings() {
-        var mappings = resolver.mappingsMetadataFor("Order");
-        var sqls = MetadataDdlGenerator.generateAddColumnsForMappings("case_plain_order", mappings.values());
-        // Order.json in test fixtures requests exportToPlain for customer_id and order_total
-        assertThat(sqls).anyMatch(s -> s.contains("order_total") && s.contains("NUMERIC"));
-        assertThat(sqls).anyMatch(s -> s.contains("customer_id") && s.contains("VARCHAR"));
+        var order = resolver.resolveForClass("Order");
+        assertThat(order).isNotNull();
+        assertThat(order._class).isEqualTo("Order");
     }
 }

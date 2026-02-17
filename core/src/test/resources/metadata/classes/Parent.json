@@ -1,11 +1,8 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "Parent",
   "parent": "GrandParent",
   "jsonPath": "$",
-  "mappings": [
-    { "column": "b_col", "jsonPath": "$.b_override", "type": "string" },
-    { "column": "c_col", "jsonPath": "$.c", "type": "string" }
-  ],
   "fields": [
     { "name": "b", "jsonPath": "$.b_override", "type": "string" },
     { "name": "c", "jsonPath": "$.c", "type": "string" }

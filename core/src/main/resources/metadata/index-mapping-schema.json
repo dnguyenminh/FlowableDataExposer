@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Index Mapping Schema (supports web exposes/indices)",
+  "type": "object",
+  "anyOf": [
+    { "required": ["class"] },
+    { "required": ["workClassReference"] },
+    { "required": ["entityType"] }
+  ],
+  "properties": {
+    "class": { "type": "string" },
+    "workClassReference": { "type": "string" },
+    "classReference": { "type": "string" },
+    "entityType": { "type": "string" },
+    "jsonPath": { "type": "string" },
+    "table": { "type": "string" },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["jsonPath"],
+        "properties": {
+          "jsonPath": { "type": "string" },
+          "type": { "type": "string" },
+          "plainColumn": { "type": "string" },
+          "column": { "type": "string" },
+          "nullable": { "type": "boolean" },
+          "arrayIndex": { "type": "integer" },
+          "exportDest": { "type": "array", "items": { "type": "string" } },
+          "exportMode": { "type": "string", "enum": ["single","list","map","plain"] },
+          "table": { "type": "string" },
+          "tableName": { "type": "string" },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name","jsonPath"],
+              "properties": {
+                "name": { "type": "string" },
+                "jsonPath": { "type": "string" },
+                "type": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

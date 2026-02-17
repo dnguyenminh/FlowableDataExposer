@@ -1,8 +1,14 @@
 {
+  "$schema": "/metadata/work-class-schema.json",
   "class": "Order",
+  "parent": "WorkObject",
+  "tableName": "case_plain_order",
   "entityType": "Order",
+  "description": "Order metadata with mappings for plain table export (inherits from WorkObject)",
   "jsonPath": "$",
-  "mappings": [
-    { "column": "customer_id", "class": "Customer", "jsonPath": "$.id", "exportToPlain": true, "plainColumn": "customer_id" }
+  "fields": [
+    { "name": "orderId", "jsonPath": "$.orderId", "type": "string" },
+    { "name": "total", "jsonPath": "$.total", "type": "decimal" },
+    { "name": "customer", "jsonPath": "$.customer", "className": "Customer" }
   ]
 }

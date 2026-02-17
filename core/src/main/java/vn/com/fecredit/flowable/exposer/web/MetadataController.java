@@ -5,12 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository;
 import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/metadata")
@@ -77,7 +79,11 @@ public class MetadataController {
         try {
             MetadataDefinition def = mapper.treeToValue(body, MetadataDefinition.class);
             if (def._class == null || def.entityType == null) return ResponseEntity.badRequest().body(Map.of("error", "missing class or entityType"));
-            vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef ent = new vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef();
+            SysExposeClassDef ent = new SysExposeClassDef();
+            if (def.mappings != null) {
+                for (var m : def.mappings) {
+                    JsonPath.compile(m.jsonPath); // validate jsonPath
+                }}
             ent.setClassName(def._class);
             ent.setEntityType(def.entityType);
             ent.setJsonDefinition(mapper.writeValueAsString(body));
@@ -111,4 +117,30 @@ public class MetadataController {
             return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
         }
     }
+
+    @GetMapping("/{entityType}")
+    public ResponseEntity<?> get(@PathVariable String entityType) {
+        try {
+            Optional<SysExposeClassDef> defOpt = repo.findLatestEnabledByEntityType(entityType);
+            if (defOpt.isEmpty()) return ResponseEntity.notFound().build();
+            MetadataDefinition metadata = mapper.readValue(defOpt.get().getJsonDefinition(), MetadataDefinition.class);
+            return ResponseEntity.ok(metadata);
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{entityType}")
+    public ResponseEntity<?> delete(@PathVariable String entityType) {
+        try {
+            Optional<SysExposeClassDef> defOpt = repo.findLatestEnabledByEntityType(entityType);
+            if (defOpt.isEmpty()) return ResponseEntity.notFound().build();
+            repo.delete(defOpt.get());
+            resolver.evict(entityType);
+            return ResponseEntity.ok(Map.of("deleted", entityType));
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
+        }
+    }
+
 }

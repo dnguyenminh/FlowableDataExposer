@@ -4,7 +4,7 @@ Trong các hệ thống BPM hiện đại, dữ liệu không được "đóng �
 
 Vấn đề: Khi quy trình thay đổi, việc thêm cột vào Database truyền thống rất tốn kém và dễ gây lỗi hệ thống.
 
-Giải pháp: Lưu trữ toàn bộ trạng thái Case vào một Case Data Store (Blob) vĩnh viễn và chỉ trích xuất (Expose) các thuộc tính cần thiết ra các Index Tables phục vụ báo cáo. Nếu báo cáo cần thêm thông tin, ta chỉ việc "Re-index" từ nguồn dữ liệu gốc (Blob).
+Giải pháp: Lưu trữ toàn bộ trạng thái Case vào một Case Data Store (Blob) vĩnh viễn. Sau đó, trích xuất (Expose) các thuộc tính cần thiết ra các cấu trúc dữ liệu phẳng để phục vụ báo cáo, bao gồm việc "thúc đẩy" (promoting) dữ liệu ra các cột trên bảng nghiệp vụ chính hoặc đưa dữ liệu vào các bảng chỉ mục (Index Tables) chuyên dụng. Nếu báo cáo cần thêm thông tin, ta chỉ việc "Re-index" từ nguồn dữ liệu gốc (Blob).
 
 2. DANH SÁCH USE CASES
 UC 01: Lưu trữ Case Data vĩnh viễn (The Source of Truth)
@@ -23,7 +23,7 @@ Luồng xử lý:
 UC 02: Trích xuất thuộc tính động (Property Exposure)
 Actor: Async Indexer Worker (System).
 
-Mô tả: Sau khi dữ liệu gốc được lưu, hệ thống tự động cập nhật bảng Index để phục vụ báo cáo. Indexing must also expose parent-class audit fields (CREATED_AT, UPDATED_BY, TENANT_ID) to support cross-cutting reports.
+Mô tả: Sau khi dữ liệu gốc được lưu, hệ thống tự động cập nhật các bảng dữ liệu dẫn xuất (derived data tables) để phục vụ báo cáo. Quá trình này có thể là "Exposing" (cập nhật cột trên bảng nghiệp vụ chính) hoặc "Indexing" (cập nhật các bảng chỉ mục chuyên dụng). Indexing must also expose parent-class audit fields (CREATED_AT, UPDATED_BY, TENANT_ID) to support cross-cutting reports.
 
 Luồng xử lý:
 
@@ -39,12 +39,12 @@ Luồng xử lý:
    - Array/List theo index ($.approvers[0].name)
    - Map theo key ($.meta['priority'])
    - Parent audit fields: $.createTime, $.startUserId, $.tenantId (fallbacks from DB created_at/requested_by)
-4. Thực hiện lệnh UPSERT vào bảng Index tương ứng (ví dụ: idx_credit_card_report).
+4. Thực hiện lệnh UPSERT vào bảng đích tương ứng (bảng nghiệp vụ chính hoặc bảng chỉ mục chuyên dụng, ví dụ: `idx_credit_card_report`).
 
 UC 03: Định nghĩa Mapping, Kế thừa và Mixins (Metadata Management)
 Actor: AI/Java Developer hoặc Business Analyst (BA).
 
-Mô tả: Cấu hình cách dữ liệu được trích xuất từ Blob ra bảng Index qua giao diện UI. Metadata must be deterministic, auditable and safe.
+Mô tả: Cấu hình cách dữ liệu được trích xuất từ Blob ra các bảng đích (work table hoặc index tables) qua giao diện UI. Metadata must be deterministic, auditable and safe.
 
 Quy tắc nghiệp vụ (ngắn gọn):
 - **Khai báo mixins:** cho phép tái sử dụng mapping (mixins áp dụng theo thứ tự khai báo; mixin sau cùng thắng khi có xung đột).
@@ -75,7 +75,7 @@ Giải mã, trích xuất theo Metadata mới và cập nhật lại bảng Inde
 3. CẤU TRÚC GIAO DIỆN QUẢN LÝ (UI MOCKUP SPEC)
 Hệ thống cung cấp một Management Console cho BA:
 
-Màn hình Danh sách Case: Xem trạng thái đồng bộ giữa Case Data Store và các Index Tables.
+Màn hình Danh sách Case: Xem trạng thái đồng bộ giữa Case Data Store và các bảng dữ liệu dẫn xuất (derived data tables).
 
 Màn hình Mapping: Giao diện kéo thả hoặc nhập JsonPath để map vào cột Database.
 

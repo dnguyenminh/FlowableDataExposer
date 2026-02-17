@@ -1,12 +1,8 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "Child",
   "parent": "Parent",
   "jsonPath": "$",
-  "mappings": [
-    { "column": "c_col", "jsonPath": "$.c_child", "type": "string" },
-    { "column": "d_col", "jsonPath": "$.d", "type": "string" },
-    { "column": "a_col", "remove": true }
-  ],
   "fields": [
     { "name": "c", "jsonPath": "$.c_child", "type": "string" },
     { "name": "d", "jsonPath": "$.d", "type": "string" }

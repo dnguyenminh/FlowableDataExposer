@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Expose Metadata Schema (supports web exposes format)",
+  "type": "object",
+  "anyOf": [
+    { "required": ["class"] },
+    { "required": ["workClassReference"] }
+  ],
+  "properties": {
+    "class": { "type": "string" },
+    "workClassReference": { "type": "string" },
+    "entityType": { "type": "string" },
+    "version": { "type": "integer" },
+    "enabled": { "type": "boolean" },
+    "jsonPath": { "type": "string" },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["jsonPath"],
+        "properties": {
+          "jsonPath": { "type": "string" },
+          "type": { "type": "string" },
+          "plainColumn": { "type": "string" },
+          "arrayIndex": { "type": "integer" },
+          "exportDest": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

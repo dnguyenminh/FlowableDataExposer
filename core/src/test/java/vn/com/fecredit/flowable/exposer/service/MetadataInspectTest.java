@@ -1,17 +1,19 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.BeforeEach;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
 import java.util.Map;
 
-@SpringBootTest
 public class MetadataInspectTest {
 
-    @Autowired
     private MetadataResolver resolver;
+
+    @BeforeEach
+    void setUp() {
+        resolver = MetadataResolverTestHelper.createMetadataResolver();
+    }
 
     @Test
     public void inspectOrderMetadata() {

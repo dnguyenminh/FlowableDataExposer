@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Work Class Metadata Schema",
+  "type": "object",
+  "required": ["class","tableName"],
+  "properties": {
+    "class": { "type": "string" },
+    "parent": { "type": "string" },
+    "mixins": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of mixin classes to apply to this class"
+    },
+    "entityType": { "type": "string" },
+    "tableName": { "type": "string" },
+    "version": { "type": "integer" },
+    "description": { "type": "string" },
+    "jsonPath": { "type": "string" },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name","jsonPath"],
+        "properties": {
+          "name": { "type": "string" },
+          "jsonPath": { "type": "string" },
+          "type": { "type": "string" },
+          "class": { "type": "string" },
+          "parent": { "type": "string" },
+          "arrayIndex": { "type": "integer" },
+          "nullable": { "type": "boolean" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

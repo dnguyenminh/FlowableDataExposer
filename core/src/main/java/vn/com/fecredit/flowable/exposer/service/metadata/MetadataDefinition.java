@@ -17,7 +17,7 @@ public class MetadataDefinition {
     public String entityType;
     public String parent;
     /** Optional mixins (additional class defs to be merged in declared order). */
-    public java.util.List<String> mixins;
+    public List<String> mixins;
     public Integer version = 1;
     public Boolean enabled = true;
     /** Mark this canonical file as deprecated so runtime can ignore it (migration path). */
@@ -27,6 +27,8 @@ public class MetadataDefinition {
     public String description;
     // optional class-level jsonPath (e.g. "$.customer") to allow class-scoped mappings
     public String jsonPath;
+    /** Required for Work Class Metadata Schema: table name where plain-exported fields will be stored. */
+    public String tableName;
     public List<FieldMapping> mappings;
 
     // Optional structured field declarations to support annotator

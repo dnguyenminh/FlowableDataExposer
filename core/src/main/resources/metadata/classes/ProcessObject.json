@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "ProcessObject",
   "parent": "FlowableObject",
   "description": "Process-instance (BPMN) canonical fields (inherits audit from FlowableObject)",

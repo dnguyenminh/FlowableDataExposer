@@ -1,5 +1,7 @@
+import org.springframework.boot.gradle.tasks.run.BootRun
+
 plugins {
-  id 'org.springframework.boot' version '3.2.6'
+  id 'org.springframework.boot' version '3.5.10'
   id 'io.spring.dependency-management' version '1.1.0'
   id 'java'
 }
@@ -19,14 +21,9 @@ dependencies {
   implementation 'org.springframework.boot:spring-boot-starter-web'
   implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
   // keep Flowable starters available on the web app classpath
-  implementation 'org.flowable:flowable-spring-boot-starter:7.2.0'
+  implementation "org.flowable:flowable-spring-boot-starter:${flowableVersion}"
 
-  testImplementation platform('org.junit:junit-bom:5.10.0')
-  testImplementation 'org.junit.jupiter:junit-jupiter'
   testImplementation 'org.springframework.boot:spring-boot-starter-test'
-  // Ensure the JUnit Platform launcher is available at test runtime to provide
-  // `org.junit.platform.engine.OutputDirectoryCreator` for the Gradle test engine.
-  testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
 }
 
 // Web module sources: only include the web controller package from the canonical tree
@@ -66,6 +63,15 @@ bootJar {
 
 // Explicitly set the BootRun main class to avoid ambiguity when multiple @SpringBootApplication
 // classes (e.g. MetadataImporterApplication) are present on the classpath.
-tasks.named('bootRun', org.springframework.boot.gradle.tasks.run.BootRun) {
+tasks.named('bootRun', BootRun) {
   mainClass.set('vn.com.fecredit.flowable.exposer.FlowableExposerApplication')
+}
+
+// Force H2 to the requested latest version across all configurations. Using
+// `configureEach` avoids eager configuration of all configurations during the
+// configuration phase.
+configurations.configureEach {
+  resolutionStrategy {
+    force "com.h2database:h2:${h2Version}"
+  }
 }

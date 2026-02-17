@@ -1,6 +1,7 @@
 package vn.com.fecredit.flowable.exposer.entity;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -9,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SysExposeClassDefTest {
 
-    private final ObjectMapper om = new ObjectMapper();
+    private final ObjectMapper om = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Test
     void defaults_and_jsonRoundtrip_work() throws Exception {

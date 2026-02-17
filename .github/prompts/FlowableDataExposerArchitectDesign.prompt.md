@@ -8,7 +8,10 @@ Instruction for AI: Act as a Senior Java Architect. Build a Spring Boot 3.x Star
 1. ARCHITECTURAL PHILOSOPHY
    Source of Truth (The Blob): The sys_case_data_store (formerly Outbox) table is Permanent. It stores the full, encrypted state of the Case.
 
-Derived Data (The Indexes): Flat tables used only for reporting and searching. They can be truncated and re-generated at any time from the Source of Truth.
+Derived Data (The Indexes): Structured data derived from the Blob for reporting and searching. This includes:
+- **Exposed Properties:** Columns promoted onto the main work table.
+- **Indexed Properties:** Dedicated, separate flat tables (e.g., `idx_order_report`).
+This derived data can be truncated and re-generated at any time from the Source of Truth.
 
 2. TECH STACK
    Java 21 (Virtual Threads, Records), Gradle (Kotlin DSL), Flowable 7.x, JsonPath, AES-256-GCM.
@@ -22,7 +25,7 @@ Security: Full JSON payload must be encrypted using Envelope Encryption (Master 
 B. Hierarchical Metadata (Pega Class Structure)
 ExposeClassDef: Defines inheritance (e.g., UrgentOrder extends BaseOrder).
 
-ExposeMapping: Maps JsonPath to Index Table columns.
+ExposeMapping: Defines the mapping from a JsonPath expression to a destination column. The destination can be a column in the main work table (Exposing) or in a dedicated index table (Indexing).
 
 Inheritance Resolver: Automatically gathers all mappings from the class hierarchy.
 
@@ -52,14 +55,16 @@ List/Array: $.items[0].id -> item_1_id (Index-based).
 
 Map: $.params['color'] -> color_attr (Key-based).
 
-Upsert: Performs a dynamic SQL Upsert into the flat Index Tables.
+Upsert: Performs a dynamic SQL `UPSERT` into the target table, which can be the main work table (for Exposed properties) or a dedicated index table (for Indexed properties).
 
 4. DATABASE SCHEMA (DDL)
    sys_case_data_store (PERMANENT):
 
 id (PK), case_instance_id, entity_type, payload (Encrypted BLOB), encrypted_key, created_at, updated_at.
 
-Metadata Tables: sys_expose_class_def, sys_expose_mapping.
+Metadata Tables: 
+- `sys_expose_class_def`: Defines the class hierarchy (inheritance, mixins).
+- `sys_expose_mapping`: Stores the core JsonPath-to-column mappings for both exposing properties to the work table and indexing properties to dedicated tables.
 
 Index Tables: User-defined flat tables (e.g., idx_order_report).
 

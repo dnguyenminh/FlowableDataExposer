@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Metadata Class Definition Schema",
+  "properties": {
+    "class": {
+      "type": "string",
+      "description": "Class name"
+    },
+    "_class": {
+      "type": "string",
+      "description": "Alternate class name"
+    },
+    "entityType": {
+      "type": "string",
+      "description": "Entity type for storage"
+    },
+    "parent": {
+      "type": "string",
+      "description": "Parent class for inheritance"
+    },
+    "mixins": {
+      "type": "array",
+      "description": "Mixin classes to include",
+      "items": {
+        "type": "string"
+      }
+    },
+    "deprecated": {
+      "type": "boolean",
+      "description": "Whether this definition is deprecated"
+    },
+    "migratedToModule": {
+      "type": "string",
+      "description": "Module this class was migrated to"
+    },
+    "fields": {
+      "type": "object",
+      "description": "Field definitions",
+      "additionalProperties": true
+    },
+    "mappings": {
+      "type": "object",
+      "description": "Field mappings",
+      "additionalProperties": true
+    },
+    "_properties": {
+      "type": "object",
+      "description": "Alternate properties definition",
+      "additionalProperties": true
+    }
+  },
+  "anyOf": [
+    { "required": ["class", "fields"] },
+    { "required": ["class", "mappings"] },
+    { "required": ["_class", "fields"] },
+    { "required": ["_class", "mappings"] }
+  ]
+}
+

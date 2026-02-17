@@ -4,7 +4,6 @@ import org.springframework.stereotype.Component;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Typed wrapper around MetadataResolver to provide safe lookup helpers for

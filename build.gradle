@@ -2,8 +2,14 @@ plugins {
     id 'java'
 }
 
-group = 'vn.com.fecredit.chunkedupload'
+group = 'vn.com.fecredit.flowable'
 version = '1.0-SNAPSHOT'
+
+ext {
+    flowableVersion = '7.2.0'
+    junitVersion = '5.10.0'
+    h2Version = '2.4.240'
+}
 
 java {
     toolchain {
@@ -11,7 +17,10 @@ java {
     }
 }
 
-repositories { mavenCentral() }
+repositories {
+    mavenCentral()
+    maven { url 'https://repo1.maven.org/maven2/' }
+}
 
 // Do not compile sources in the root project (we keep the canonical source tree in /src/* for a smooth migration).
 sourceSets {
@@ -19,9 +28,42 @@ sourceSets {
     test { java.srcDirs = [] ; resources.srcDirs = [] }
 }
 
+// Force H2 at the root level as well to ensure no project-level plugin or BOM overrides it
+configurations.all {
+    resolutionStrategy {
+        force "com.h2database:h2:${h2Version}"
+        eachDependency { details ->
+            if (details.requested.group == 'com.h2database' && details.requested.name == 'h2') {
+                details.useVersion(h2Version)
+            }
+        }
+    }
+}
+
 subprojects {
     apply plugin: 'java'
-    repositories { mavenCentral() }
+    
+    // Define the H2 version property for Spring Boot plugin / dependency management
+    ext['h2.version'] = h2Version
+
+    // Ensure subprojects can resolve artifacts from Maven Central explicitly
+    repositories {
+        mavenCentral()
+        maven { url 'https://repo1.maven.org/maven2/' }
+    }
+
+    // Provide Lombok to all subprojects (compileOnly + annotation processing)
+    dependencies {
+        compileOnly 'org.projectlombok:lombok:1.18.28'
+        annotationProcessor 'org.projectlombok:lombok:1.18.28'
+        testCompileOnly 'org.projectlombok:lombok:1.18.28'
+        testAnnotationProcessor 'org.projectlombok:lombok:1.18.28'
+
+        // Common test dependencies
+        testImplementation platform("org.junit:junit-bom:${junitVersion}")
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
 
     // Enforce style checks (Javadoc + method length) across modules
     apply plugin: 'checkstyle'
@@ -37,7 +79,7 @@ subprojects {
     }
 
     // Configure Checkstyle reports
-    tasks.withType(org.gradle.api.plugins.quality.Checkstyle).configureEach {
+    tasks.withType(Checkstyle).configureEach {
         reports {
             xml.required.set(true)
             html.required.set(true)
@@ -54,17 +96,29 @@ subprojects {
         description = 'Run Checkstyle for main sources (method-length + hygiene)'
         dependsOn tasks.named('checkstyleMain')
     }
+
+    // Force H2 to the requested latest version for all subprojects
+    configurations.all {
+        resolutionStrategy {
+            force "com.h2database:h2:${h2Version}"
+            eachDependency { details ->
+                if (details.requested.group == 'com.h2database' && details.requested.name == 'h2') {
+                    details.useVersion(h2Version)
+                }
+            }
+        }
+    }
 }
 
 // The model/metadata validation tasks operate on the `web` project's classpath/resources
 // (business processes live in the web module). They were kept at root for convenience.
-task validateModels {
+tasks.register('validateModels') {
     group = 'verification'
     description = 'Validate BPMN/CMMN/DMN model files and render PNG thumbnails to build/model-validator (operates on web module resources)'
     dependsOn(':core:testClasses', ':web:processResources')
     doLast {
         def webResources = project(':web').file('src/main/resources')
-        def outDir = file("${buildDir}/model-validator")
+        def outDir = layout.buildDirectory.dir('model-validator').get().asFile
         outDir.mkdirs()
         def src = webResources
         def patterns = ['**/processes/*.bpmn*', '**/cases/*.cmmn', '**/*.dmn']
@@ -73,12 +127,15 @@ task validateModels {
                 def rel = src.toPath().relativize(f.toPath()).toString()
                 println "Validating & rendering model: ${rel} -> ${outDir}"
                 try {
-                    javaexec {
-                        main = 'vn.com.fecredit.chunkedupload.util.ModelValidatorRenderer'
-                        classpath = project(':core').sourceSets.test.runtimeClasspath
+                    def safeName = f.name.replaceAll('[^A-Za-z0-9]','_')
+                    def taskName = "renderModel_${safeName}"
+                    def renderTask = tasks.register(taskName, JavaExec) {
+                        mainClass.set('vn.com.fecredit.flowable.exposer.util.ModelValidatorRenderer')
+                        classpath = project(':core').sourceSets.main.runtimeClasspath
                         args = [f.absolutePath, '--out', new File(outDir, f.name + '.png').absolutePath]
                         jvmArgs = ['-Xms128m', '-Xmx1g']
                     }
+                    renderTask.get().exec()
                 } catch (Exception e) {
                     def errFile = new File(outDir, f.name + '.error.txt')
                     errFile.parentFile.mkdirs()
@@ -90,22 +147,27 @@ task validateModels {
     }
 }
 
-task validateMetadata {
+tasks.register('validateMetadata') {
     group = 'verification'
     description = 'Validate metadata JSON files under web/src/main/resources/metadata'
     doLast {
         def metaDir = project(':web').file('src/main/resources/metadata')
-        if (!metaDir.exists()) { println 'No metadata directory found; nothing to validate.'; return }
+        if (!metaDir.exists()) {
+            println 'No metadata directory found; nothing to validate.'; return
+        }
         def errors = []
         fileTree(metaDir).matching { include '*.json' }.each { f ->
             println "Validating metadata: ${f.name}"
             try {
-                javaexec {
-                    main = 'vn.com.fecredit.flowable.exposer.service.metadata.MetadataTool'
+                def safeName = f.name.replaceAll('[^A-Za-z0-9]','_')
+                def taskName = "validateMeta_${safeName}"
+                def metaTask = tasks.register(taskName, JavaExec) {
+                    mainClass.set('vn.com.fecredit.flowable.exposer.service.metadata.MetadataTool')
                     classpath = project(':core').sourceSets.test.runtimeClasspath
                     args = ['--validate', f.absolutePath]
-                    jvmArgs = ['-Xms64m','-Xmx512m']
+                    jvmArgs = ['-Xms64m', '-Xmx512m']
                 }
+                metaTask.get().exec()
             } catch (Exception e) {
                 println "  [ERROR] ${e.message}"
                 errors << f.name
@@ -115,16 +177,18 @@ task validateMetadata {
     }
 }
 
-task exportMetadataToDb {
+tasks.register('exportMetadataToDb') {
     group = 'application'
     description = 'Import metadata JSON files from web module into sys_expose_class_def (DB)'
     dependsOn ':core:classes'
     doLast {
-        javaexec {
-            main = 'vn.com.fecredit.flowable.exposer.service.metadata.MetadataImporterApplication'
+        def taskName = 'importMetadataToDb'
+        def importTask = tasks.register(taskName, JavaExec) {
+            mainClass.set('vn.com.fecredit.flowable.exposer.service.metadata.MetadataImporterApplication')
             classpath = project(':core').sourceSets.main.runtimeClasspath
             args = ['--importFiles']
-            jvmArgs = ['-Xms128m','-Xmx1g']
+            jvmArgs = ['-Xms128m', '-Xmx1g']
         }
+        importTask.get().exec()
     }
 }

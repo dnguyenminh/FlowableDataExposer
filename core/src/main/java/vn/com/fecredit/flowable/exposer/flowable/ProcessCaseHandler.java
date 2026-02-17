@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeRequestRepository;
 import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 import vn.com.fecredit.flowable.exposer.service.RequestPersistService;
 
 import java.util.Map;
@@ -25,7 +26,7 @@ public class ProcessCaseHandler {
     private SysExposeRequestRepository requestRepo;
 
     @Autowired(required = false)
-    private vn.com.fecredit.flowable.exposer.service.MetadataAnnotator annotator;
+    private MetadataAnnotator annotator;
 
     private final ObjectMapper om = new ObjectMapper();
 

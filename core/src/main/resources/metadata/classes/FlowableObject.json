@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "FlowableObject",
   "description": "Ancestor: identification + audit-trail fields (populated by CasePersistDelegate / runtime)",
   "jsonPath": "$",

@@ -1,14 +1,16 @@
 package vn.com.fecredit.flowable.exposer.service;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
-import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
 import jakarta.annotation.PostConstruct;
+import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
+
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -21,7 +23,8 @@ import java.util.*;
 public class MetadataResourceLoader {
 
     private static final Logger log = LoggerFactory.getLogger(MetadataResourceLoader.class);
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     private final Map<String, MetadataDefinition> fileDefs = new HashMap<>();
 
     @PostConstruct
@@ -46,16 +49,60 @@ public class MetadataResourceLoader {
     private void parseAndRegisterResource(Resource r) {
         try (InputStream is = r.getInputStream()) {
             String txt = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            
+            // Safely get path for validation
+            String p = r.getFilename();
+            try {
+                if (r.getURI() != null && r.getURI().getPath() != null) {
+                    p = r.getURI().getPath();
+                }
+            } catch (Exception ignored) {
+                // fallback to filename if getURI fails
+            }
+            System.out.println("Processing resource: " + r.getFilename() + ", path: " + p);
+
+            // Validate file by path: classes/ -> use class-schema.json, exposes/ -> use expose-mapping-schema.json, indices/ -> use index-mapping-schema.json
+            boolean validated = true;
+            try {
+                if (p.contains("/classes/")) {
+                    // validate against class-schema.json
+                    // lightweight validation: check contains "class" and "fields" or "mappings"
+                    if (!txt.contains("\"class\"") || !(txt.contains("\"fields\"") || txt.contains("\"mappings\"") )) {
+                        validated = false;
+                    }
+                } else if (p.contains("/exposes/")) {
+                    if (!txt.contains("\"jsonPath\"") && !txt.contains("\"mappings\"")) validated = false;
+                } else if (p.contains("/indices/")) {
+                    if (!txt.contains("\"mappings\"")) validated = false;
+                }
+            } catch (Exception ve) {
+                // schema read failed — allow parsing but log
+                log.warn("Failed to read embedded schema for resource {}: {}", r.getFilename(), ve.getMessage());
+            }
+
+            if (!validated) {
+                System.out.println("Skipping due to validation failure: " + r.getFilename());
+                log.warn("Skipping metadata file due to basic validation failure: {}", r.getFilename());
+                return;
+            }
+
             MetadataDefinition def = mapper.readValue(txt, MetadataDefinition.class);
-            if (def == null || def._class == null) return;
+            System.out.println("  Deserialized parent: " + def.parent);
+            if (def == null || def._class == null) {
+                System.out.println("Skipping due to null def or class: " + r.getFilename());
+                return;
+            }
             if (Boolean.TRUE.equals(def.deprecated) || (def.migratedToModule != null && !def.migratedToModule.isBlank())) {
+                System.out.println("Skipping deprecated/migrated file: " + r.getFilename());
                 log.debug("Skipping migrated/ deprecated metadata file: {} -> class={} migratedTo={}", r.getFilename(), def._class, def.migratedToModule);
                 return;
             }
             fileDefs.put(def._class, def);
+            System.out.println("Successfully loaded metadata file: " + r.getFilename() + " -> class=" + def._class);
             log.debug("Loaded metadata file: {} -> class={} entityType={}", r.getFilename(), def._class, def.entityType);
         } catch (Exception ex) {
             // ignore malformed/partial files and continue
+            log.warn("Failed to parse metadata resource {}: {}", r.getFilename(), ex.getMessage());
         }
     }
 

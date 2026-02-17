@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "DataObject",
   "parent": "FlowableObject",
   "description": "Shared data / nested objects (inherits audit from FlowableObject)",

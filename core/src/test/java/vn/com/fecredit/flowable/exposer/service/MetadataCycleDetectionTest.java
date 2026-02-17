@@ -1,16 +1,21 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
+
 public class MetadataCycleDetectionTest {
 
-    @Autowired
-    MetadataResolver resolver;
+    private MetadataResolver resolver;
+
+    @BeforeEach
+    void setUp() {
+        resolver = MetadataResolverTestHelper.createMetadataResolver();
+    }
 
     @Test
     void detects_circular_parent_reference_and_reports_diagnostic() {

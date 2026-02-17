@@ -1,0 +1,13 @@
+{
+  "workClassReference": "web/src/main/resources/metadata/classes/Order.json",
+  "classReference": "web/src/main/resources/metadata/classes/Item.json",
+  "jsonPath": "$.items",
+  "tableName": "orders_index",
+  "mappings": [
+    {
+      "jsonPath": "$.id",
+      "type": "string",
+      "plainColumn": "id"
+    }
+  ]
+}

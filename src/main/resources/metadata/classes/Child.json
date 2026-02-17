@@ -1,0 +1,8 @@
+{
+  "$schema": "/metadata/class-schema.json",
+  "class": "Child",
+  "parent": "Parent",
+  "description": "Child metadata class for testing purposes",
+  "jsonPath": "$",
+  "fields": []
+}

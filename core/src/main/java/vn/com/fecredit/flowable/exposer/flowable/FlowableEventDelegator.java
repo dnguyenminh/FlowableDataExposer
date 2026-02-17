@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 import vn.com.fecredit.flowable.exposer.service.RequestPersistService;
 
 @Component
@@ -22,7 +23,7 @@ public class FlowableEventDelegator {
     private RequestPersistService requestPersistService;
 
     @Autowired(required = false)
-    private vn.com.fecredit.flowable.exposer.service.MetadataAnnotator annotator;
+    private MetadataAnnotator annotator;
 
     @Autowired(required = false)
     private TaskExposeHandler taskExposeHandler;

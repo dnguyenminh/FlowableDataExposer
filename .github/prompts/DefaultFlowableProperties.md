@@ -30,8 +30,10 @@ UC-01: Chụp Snapshot và Lưu trữ vĩnh viễn (Source of Truth)
 2.	Hệ thống tự động điền các trường Audit (lastUpdated, lastUpdateUserId) từ Engine context.
 3.	Mã hóa JSON Payload bằng AES-256-GCM (Envelope Encryption).
 4.	Lưu vĩnh viễn vào bảng sys_case_data_store. Lưu ý: Bảng này không bao giờ bị xóa.
-UC-02: Trích xuất thuộc tính động (Property Exposure)
-•	Mô tả: Tự động đồng bộ dữ liệu từ JSON Blob ra các bảng phẳng (Index Tables) để báo cáo.
+UC-02: Trích xuất thuộc tính động (Exposing and Indexing Properties)
+•	Mô tả: Tự động đồng bộ dữ liệu từ JSON Blob ra các bảng dữ liệu có cấu trúc (structured data tables) để phục vụ truy vấn và báo cáo. Quá trình này có hai hình thức:
+    - **Exposing Properties:** "Thúc đẩy" (promote) các thuộc tính quan trọng từ JSON vào các cột trên chính bảng nghiệp vụ (work table).
+    - **Indexing Properties:** Trích xuất thuộc tính ra các bảng chỉ mục (index tables) chuyên dụng, tách biệt hoàn toàn cho mục đích báo cáo.
 •	Cơ chế:
 o	Sử dụng Virtual Threads để giải mã và trích xuất bất đồng bộ.
 o	Hỗ trợ JsonPath cho dữ liệu phức tạp: $.items[0] (List) hoặc $.params['region'] (Map).

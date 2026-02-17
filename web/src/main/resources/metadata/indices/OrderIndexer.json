@@ -1,0 +1,58 @@
+{
+  "workClassReference": "web/src/main/resources/metadata/classes/Order.json",
+  "classReference": "web/src/main/resources/metadata/classes/Order.json",
+  "jsonPath": "$",
+  "tableName": "orders_index",
+  "mappings": [
+    {
+      "jsonPath": "$.total",
+      "type": "decimal",
+      "plainColumn": "order_total"
+    },
+    {
+      "jsonPath": "$.customer.id",
+      "type": "string",
+      "plainColumn": "customer_id"
+    },
+    {
+      "jsonPath": "$.customer.name",
+      "type": "string",
+      "plainColumn": "customer_name"
+    },
+    {
+      "jsonPath": "$.meta.priority",
+      "type": "string",
+      "plainColumn": "order_priority"
+    },
+    {
+      "jsonPath": "$.approvalDecision.status",
+      "type": "string",
+      "plainColumn": "approval_status"
+    },
+    {
+      "jsonPath": "$.approvalDecision.reason",
+      "type": "string",
+      "plainColumn": "decision_reason"
+    },
+    {
+      "jsonPath": "$.orderRules.discount",
+      "type": "decimal",
+      "plainColumn": "discount"
+    },
+    {
+      "jsonPath": "$.shippingFee",
+      "type": "decimal",
+      "plainColumn": "shipping_fee"
+    },
+    {
+      "jsonPath": "$.items[0].id",
+      "type": "string",
+      "plainColumn": "item_1_id"
+    },
+    {
+      "jsonPath": "$.params.color",
+      "type": "string",
+      "plainColumn": "color_attr"
+    }
+  ]
+}

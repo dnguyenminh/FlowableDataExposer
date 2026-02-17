@@ -1,0 +1,7 @@
+{
+  "class": "Order",
+  "tableName": "case_plain_order",
+  "entityType": "Order",
+  "description": "Order metadata with mappings for plain table export",
+  "jsonPath": "$"
+}
