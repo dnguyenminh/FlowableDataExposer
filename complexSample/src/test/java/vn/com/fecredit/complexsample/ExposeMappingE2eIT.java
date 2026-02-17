@@ -43,15 +43,9 @@ public class ExposeMappingE2eIT {
                     } catch (Exception e) { return false; }
                 });
 
-        // trigger reindex endpoint
-        try { rest.postForEntity("http://localhost:" + port + "/api/orders/" + caseInstanceId + "/reindex", null, Void.class); } catch (Exception ignored) {}
-
-        // deterministic: invoke worker directly if available
-        try {
-            Object worker = ctx.getBean("caseDataWorker");
-            var m = worker.getClass().getMethod("reindexByCaseInstanceId", String.class);
-            m.invoke(worker, caseInstanceId);
-        } catch (Exception ignored) {}
+        // Rely on background worker to process events asynchronously. Do NOT trigger the worker
+        // or reindex endpoint manually in this end-to-end test; the Awaitility below will
+        // observe whether the system processed the case and populated the plain table.
 
         // wait for plain table
         Awaitility.await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(250))
