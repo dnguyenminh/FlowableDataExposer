@@ -14,4 +14,9 @@ This file provides guidance to agents when working with code in this repository.
 - Logs & debugging: sample app listens on port 8080; check `complexSample_run.log` and module `logback-spring.xml` for boot diagnostics if bootRun fails.
 - Tests: integration tests use H2. Keep tests co-located with sources (module src/test) to match Gradle config.
 
+- Coding rules enforced for agents:
+  - 1 class must not be more than 200 lines of code.
+  - 1 method must not be more than 20 lines of code.
+  - Must apply SOLID principles when making changes.
+
 (Only non-obvious, project-specific rules are listed above.)

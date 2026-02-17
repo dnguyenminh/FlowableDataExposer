@@ -3,11 +3,9 @@
   "title": "Expose Metadata Schema (supports web exposes format)",
   "type": "object",
   "anyOf": [
-    { "required": ["class"] },
     { "required": ["workClassReference"] }
   ],
   "properties": {
-    "class": { "type": "string" },
     "workClassReference": { "type": "string" },
     "entityType": { "type": "string" },
     "version": { "type": "integer" },

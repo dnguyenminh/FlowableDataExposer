@@ -1,0 +1,28 @@
+{
+  "$schema": "/metadata/expose-mapping-schema.json",
+  "class": "OrderExpose",
+  "workClassReference": "Order",
+  "entityType": "order",
+  "version": 1,
+  "enabled": true,
+  "jsonPath": "$",
+  "mappings": [
+    {
+      "jsonPath": "$.total",
+      "type": "number",
+      "plainColumn": "total_amount",
+      "exportDest": ["report", "search"]
+    },
+    {
+      "jsonPath": "$.items[0].id",
+      "type": "string",
+      "plainColumn": "item_1_id",
+      "arrayIndex": 0
+    },
+    {
+      "jsonPath": "$.customer.name",
+      "type": "string",
+      "plainColumn": "customer_name"
+    }
+  ]
+}

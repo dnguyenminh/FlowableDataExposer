@@ -1,0 +1,14 @@
+{
+  "$schema": "/metadata/class-schema.json",
+  "class": "Order",
+  "parent": "WorkObject",
+  "description": "Order sample for tests",
+  "jsonPath": "$",
+  "fields": [
+    { "name": "total", "jsonPath": "$.total", "type": "number" },
+    { "name": "items", "jsonPath": "$.items", "type": "array" },
+    { "name": "customer", "jsonPath": "$.customer", "type": "object" },
+    { "name": "customerName", "jsonPath": "$.customer.name", "type": "string" },
+    { "name": "itemId", "jsonPath": "$.items[0].id", "type": "string" }
+  ]
+}

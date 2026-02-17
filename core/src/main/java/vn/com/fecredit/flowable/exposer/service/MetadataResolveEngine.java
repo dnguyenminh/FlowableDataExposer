@@ -60,8 +60,10 @@ public final class MetadataResolveEngine {
         if (lower.endsWith("process")) {
             String base = classOrEntityType.substring(0, classOrEntityType.length() - "process".length());
             if (!base.isBlank()) {
-                candidates.add(base);
-                candidates.add(Character.toUpperCase(base.charAt(0)) + base.substring(1));
+                // add lowercase base and capitalized form, avoiding duplicates
+                if (!candidates.contains(base)) candidates.add(base);
+                String cap = Character.toUpperCase(base.charAt(0)) + base.substring(1);
+                if (!candidates.contains(cap)) candidates.add(cap);
             }
         }
         return candidates;
