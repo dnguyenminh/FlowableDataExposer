@@ -20,7 +20,9 @@ dependencies {
   implementation 'org.springframework.boot:spring-boot-starter'
   implementation 'org.springframework.boot:spring-boot-starter-web'
   implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-  implementation "org.flowable:flowable-spring-boot-starter:${flowableVersion}"
+  // Use the process-only starter to avoid initializing Flowable App/Idm/Form engines
+  // (these create duplicate schema objects in H2 during tests)
+  implementation "org.flowable:flowable-spring-boot-starter-process:${flowableVersion}"
   // JSON Schema validator used by MetadataController for strict validation
   implementation 'com.networknt:json-schema-validator:3.0.0'
 
