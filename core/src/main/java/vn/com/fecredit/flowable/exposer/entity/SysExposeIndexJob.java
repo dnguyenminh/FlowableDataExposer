@@ -21,11 +21,13 @@ public class SysExposeIndexJob {
     @Column(name = "class_name")
     private String className;
 
-    @Column(name = "mappings", columnDefinition = "jsonb", nullable = false)
+    @Lob
+    @Column(name = "mappings", nullable = false)
     private String mappings; // JSON array as string
 
-    @Column(name = "ddl_statements", columnDefinition = "text[]")
-    private String[] ddlStatements;
+    @Lob
+    @Column(name = "ddl_statements")
+    private String ddlStatements;
 
     @Column(name = "dry_run")
     private Boolean dryRun = Boolean.TRUE;
@@ -57,8 +59,8 @@ public class SysExposeIndexJob {
     public void setClassName(String className) { this.className = className; }
     public String getMappings() { return mappings; }
     public void setMappings(String mappings) { this.mappings = mappings; }
-    public String[] getDdlStatements() { return ddlStatements; }
-    public void setDdlStatements(String[] ddlStatements) { this.ddlStatements = ddlStatements; }
+    public String getDdlStatements() { return ddlStatements; }
+    public void setDdlStatements(String ddlStatements) { this.ddlStatements = ddlStatements; }
     public Boolean getDryRun() { return dryRun; }
     public void setDryRun(Boolean dryRun) { this.dryRun = dryRun; }
     public Integer getChunkSize() { return chunkSize; }

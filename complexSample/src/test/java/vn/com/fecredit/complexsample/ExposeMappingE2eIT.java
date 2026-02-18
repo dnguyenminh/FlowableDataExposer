@@ -81,7 +81,7 @@ public class ExposeMappingE2eIT {
         headers.setContentType(MediaType.APPLICATION_JSON);
         String body = "{\"orderId\":\"12345\",\"customer\":{\"id\":\"CUST01\"},\"total\":1234.56}";
         HttpEntity<String> request = new HttpEntity<>(body, headers);
-        ResponseEntity<Map> response = rest.postForEntity("http://localhost:" + port + "/api/orders/start", request, Map.class);
+        ResponseEntity<Map> response = rest.postForEntity("http://localhost:" + port + "/api/orders", request, Map.class);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         Map<String,Object> respBody = response.getBody();
         assertThat(respBody).isNotNull().containsKey("id");

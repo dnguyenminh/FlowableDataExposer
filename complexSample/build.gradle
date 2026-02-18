@@ -33,22 +33,22 @@ sourceSets {
       srcDirs = ['src/main/java']
     }
     resources {
-      srcDirs = ['src/main/resources', '../src/main/resources']
+      srcDirs = ['src/main/resources']
       include 'processes/**', 'cases/**', 'decisions/**', 'metadata/**', 'static/**', 'application.properties', 'application-*.properties'
     }
   }
   test {
     java {
-      srcDirs = ['src/test/java', '../src/test/java']
-      include 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
-              'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
-              'vn/com/fecredit/flowable/exposer/OrderControllerTest.java',
-              'vn/com/fecredit/flowable/exposer/OrdersUiTest.java',
-              'vn/com/fecredit/flowable/exposer/OrdersE2eIT.java',
-              'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
-              'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
+      srcDirs = ['src/test/java']
+      // include 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
+      //         'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
+      //         'vn/com/fecredit/flowable/exposer/OrderControllerTest.java',
+      //         'vn/com/fecredit/flowable/exposer/OrdersUiTest.java',
+      //         'vn/com/fecredit/flowable/exposer/OrdersE2eIT.java',
+      //         'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
+      //         'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
     }
-    resources.srcDirs = ['src/test/resources', '../src/test/resources']
+    resources.srcDirs = ['src/test/resources']
   }
 }
 
