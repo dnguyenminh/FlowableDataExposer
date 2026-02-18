@@ -33,7 +33,7 @@ public class SysExposeClassDef {
     private Integer version;
 
     @Lob
-    @Column(name = "json_definition", nullable = false, columnDefinition = "CLOB")
+    @Column(name = "json_definition", nullable = false)
     @JsonProperty("jsonDefinition")
     private String jsonDefinition;
 

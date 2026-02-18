@@ -40,21 +40,32 @@ public class FlowableEventListenerConfiguration {
     }
 
     /**
-     * Register listener with CMMN Engine
+     * Register listener with CMMN Engine (use reflection so this class compiles when CMMN
+     * engine classes are not present on the classpath).
      */
     @Bean
-    public EngineConfigurationConfigurer<org.flowable.cmmn.spring.SpringCmmnEngineConfiguration> cmmnEventListenerConfigurer(
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public EngineConfigurationConfigurer<Object> cmmnEventListenerConfigurer(
             GlobalFlowableEventListener globalFlowableEventListener) {
         return engineConfiguration -> {
-            List<FlowableEventListener> eventListeners = engineConfiguration.getEventListeners();
-            if (eventListeners == null) {
-                eventListeners = new ArrayList<>();
-                engineConfiguration.setEventListeners(eventListeners);
-            }
-            
-            // Add our global listener if not already present
-            if (!eventListeners.contains(globalFlowableEventListener)) {
-                eventListeners.add(globalFlowableEventListener);
+            try {
+                // Use reflection to call getEventListeners()/setEventListeners() so we don't
+                // require compile-time dependency on CMMN configuration classes.
+                java.lang.reflect.Method getMethod = engineConfiguration.getClass().getMethod("getEventListeners");
+                java.util.List<FlowableEventListener> eventListeners = (java.util.List<FlowableEventListener>) getMethod.invoke(engineConfiguration);
+                if (eventListeners == null) {
+                    eventListeners = new ArrayList<>();
+                    java.lang.reflect.Method setMethod = engineConfiguration.getClass().getMethod("setEventListeners", java.util.List.class);
+                    setMethod.invoke(engineConfiguration, eventListeners);
+                }
+
+                if (!eventListeners.contains(globalFlowableEventListener)) {
+                    eventListeners.add(globalFlowableEventListener);
+                }
+            } catch (NoSuchMethodException ignored) {
+                // Engine configuration doesn't expose event listener hooks; nothing to do
+            } catch (Exception e) {
+                // Non-fatal: avoid breaking application startup
             }
         };
     }

@@ -13,15 +13,21 @@ import java.io.InputStream;
 @Component
 public class DmnAutoDeployer {
     private final Logger log = LoggerFactory.getLogger(DmnAutoDeployer.class);
-    private final DmnRepositoryService dmnRepositoryService;
+    private final org.springframework.beans.factory.ObjectProvider<DmnRepositoryService> dmnRepositoryServiceProvider;
 
-    public DmnAutoDeployer(DmnRepositoryService dmnRepositoryService) {
-        this.dmnRepositoryService = dmnRepositoryService;
+    public DmnAutoDeployer(org.springframework.beans.factory.ObjectProvider<DmnRepositoryService> dmnRepositoryServiceProvider) {
+        this.dmnRepositoryServiceProvider = dmnRepositoryServiceProvider;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void deployDecisions() {
         try {
+            DmnRepositoryService dmnRepositoryService = dmnRepositoryServiceProvider.getIfAvailable();
+            if (dmnRepositoryService == null) {
+                log.debug("DMN engine not available on classpath; skipping DMN auto-deploy");
+                return;
+            }
+
             ClassPathResource r = new ClassPathResource("decisions/order-discount-rules.dmn");
             if (!r.exists()) {
                 log.debug("No DMN resource found at decisions/order-discount-rules.dmn");
