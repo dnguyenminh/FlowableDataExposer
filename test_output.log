@@ -1,0 +1,58 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :core:compileJava UP-TO-DATE
+> Task :complexSample:compileJava UP-TO-DATE
+> Task :complexSample:processResources UP-TO-DATE
+> Task :complexSample:classes UP-TO-DATE
+> Task :complexSample:compileTestJava UP-TO-DATE
+> Task :complexSample:processTestResources UP-TO-DATE
+> Task :complexSample:testClasses UP-TO-DATE
+> Task :core:processResources UP-TO-DATE
+> Task :core:classes UP-TO-DATE
+> Task :core:jar UP-TO-DATE
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+> Task :complexSample:test
+
+ExposeMappingE2eIT > startBpmnAndVerifyPlainTable() FAILED
+    java.lang.AssertionError at ExposeMappingE2eIT.java:187
+
+ExposeMappingE2eIT > startCmmnAndVerifyPlainTable() FAILED
+    java.lang.AssertionError at ExposeMappingE2eIT.java:187
+
+2026-02-19T17:44:19.614+07:00  INFO 624685 --- [ionShutdownHook] o.s.b.w.e.tomcat.GracefulShutdown        : Commencing graceful shutdown. Waiting for active requests to complete
+2026-02-19T17:44:19.617+07:00  INFO 624685 --- [tomcat-shutdown] o.s.b.w.e.tomcat.GracefulShutdown        : Graceful shutdown complete
+2026-02-19T17:44:19.621+07:00  INFO 624685 --- [ionShutdownHook] o.f.j.s.i.a.AbstractAsyncExecutor        : Shutting down the async job executor [org.flowable.spring.job.service.SpringAsyncExecutor] for engine cmmn
+2026-02-19T17:44:19.621+07:00  INFO 624685 --- [et-expired-jobs] o.f.j.s.i.a.ResetExpiredJobsRunnable     : stopped resetting expired jobs for engine cmmn
+2026-02-19T17:44:19.621+07:00  INFO 624685 --- [uire-async-jobs] o.f.j.s.i.a.AcquireAsyncJobsDueRunnable  : stopped async job due acquisition for engine cmmn
+2026-02-19T17:44:19.621+07:00  INFO 624685 --- [uire-timer-jobs] o.f.j.s.i.a.AcquireTimerJobsRunnable     : stopped async job due acquisition for engine cmmn
+2026-02-19T17:44:19.625+07:00  INFO 624685 --- [ionShutdownHook] o.f.j.s.i.a.AbstractAsyncExecutor        : Shutting down the async job executor [org.flowable.spring.job.service.SpringAsyncExecutor] for engine bpmn
+2026-02-19T17:44:19.626+07:00  INFO 624685 --- [uire-async-jobs] o.f.j.s.i.a.AcquireAsyncJobsDueRunnable  : stopped async job due acquisition for engine bpmn
+2026-02-19T17:44:19.626+07:00  INFO 624685 --- [et-expired-jobs] o.f.j.s.i.a.ResetExpiredJobsRunnable     : stopped resetting expired jobs for engine bpmn
+2026-02-19T17:44:19.626+07:00  INFO 624685 --- [uire-timer-jobs] o.f.j.s.i.a.AcquireTimerJobsRunnable     : stopped async job due acquisition for engine bpmn
+2026-02-19T17:44:19.632+07:00  INFO 624685 --- [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-02-19T17:44:19.633+07:00  INFO 624685 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-02-19T17:44:19.634+07:00  INFO 624685 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+
+> Task :complexSample:test FAILED
+
+2 tests completed, 2 failed
+
+[Incubating] Problems report is available at: file:///home/ducnm/projects/java/FlowableDataExposer/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':complexSample:test'.
+> There were failing tests. See the report at: file:///home/ducnm/projects/java/FlowableDataExposer/complexSample/build/reports/tests/test/index.html
+
+* Try:
+> Run with --scan to get full insights.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 1m 12s
+8 actionable tasks: 1 executed, 7 up-to-date

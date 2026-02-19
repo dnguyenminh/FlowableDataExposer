@@ -100,6 +100,11 @@ public class CaseDataWorker {
             log.debug("reindexByCaseInstanceId - resolved entityType={}, mappings.count={}, legacy.count={}, directFallbacks.count={}",
                     entityType, mappings == null ? 0 : mappings.size(), legacyMappings == null ? 0 : legacyMappings.size(), directFallbacks == null ? 0 : directFallbacks.size());
 
+            // Diagnostic: log case id and effective mapping keys
+            try {
+                System.out.println("DEBUG[CaseDataWorker]: processing caseInstanceId=" + caseInstanceId + " effectiveMappingsKeys=" + (effectiveMappings==null?"[]":effectiveMappings.keySet()));
+            } catch (Exception ignored) {}
+
             upsertPlain(entityType, caseInstanceId, annotatedJson, rowCreatedAt, effectiveMappings, legacyMappings, directFallbacks);
 
             log.info("reindexByCaseInstanceId - completed for {}", caseInstanceId);
