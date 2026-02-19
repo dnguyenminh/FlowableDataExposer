@@ -1,0 +1,13 @@
+{
+  "class": "Order",
+  "description": "Expose mapping for Order to populate case_plain_order",
+  "table": "case_plain_order",
+  "exportMode": "plain",
+  "mappings": [
+    { "jsonPath": "$.total", "plainColumn": "order_total", "type": "decimal", "nullable": false },
+    { "jsonPath": "$.customer.id", "plainColumn": "customer_id", "type": "string", "nullable": true },
+    { "jsonPath": "$.priority", "plainColumn": "order_priority", "type": "string", "nullable": true },
+    { "jsonPath": "$.requestedBy", "plainColumn": "requested_by", "type": "string", "nullable": true },
+    { "jsonPath": "$", "plainColumn": "plain_payload", "type": "json", "nullable": false }
+  ]
+}

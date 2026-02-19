@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "OrderRules",
   "parent": "DataObject",
   "description": "Derived rules (discount/shipping)",

@@ -57,7 +57,11 @@ public class FlowableEventDelegator {
             if (vars == null || vars.isEmpty()) return;
 
             String caseInstanceId = vars.containsKey("caseInstanceId") ? String.valueOf(vars.get("caseInstanceId")) : null;
-            if (caseInstanceId == null) caseInstanceId = String.valueOf(reflect(entity, "getId"));
+            if (caseInstanceId == null) {
+                // Try getProcessInstanceId first (for execution entities), fall back to getId
+                Object piId = reflect(entity, "getProcessInstanceId");
+                caseInstanceId = piId != null ? String.valueOf(piId) : String.valueOf(reflect(entity, "getId"));
+            }
 
             String entityType = "Order";
 

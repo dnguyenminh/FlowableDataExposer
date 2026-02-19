@@ -26,6 +26,8 @@ dependencies {
 
   // Flowable engine pieces used by core services
   implementation "org.flowable:flowable-dmn-engine:${flowableVersion}"
+  implementation "org.flowable:flowable-dmn-spring:${flowableVersion}"
+  implementation "org.flowable:flowable-dmn-spring-configurator:${flowableVersion}"
   // Use process-only starter in core to avoid initializing multiple Flowable engines during tests
   implementation "org.flowable:flowable-spring-boot-starter-process:${flowableVersion}"
   // Image/renderer + converters (used by ModelValidatorRenderer)

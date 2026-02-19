@@ -7,7 +7,6 @@
   ],
   "properties": {
     "workClassReference": { "type": "string" },
-    "entityType": { "type": "string" },
     "version": { "type": "integer" },
     "enabled": { "type": "boolean" },
     "jsonPath": { "type": "string" },

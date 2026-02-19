@@ -65,7 +65,8 @@ public class OrderController {
         if (vars == null) vars = new HashMap<>();
         vars.putIfAbsent("initiator", "system");
         ProcessInstance pi = runtimeService.startProcessInstanceByKey("onlineOrderProcess", vars);
-        return pi.getId();
+        // Return the process instance ID (not execution ID) to match what's logged in events
+        return pi.getProcessInstanceId();
     }
 
     private String startCmmnCase(Map<String, Object> vars) throws ReflectiveOperationException {

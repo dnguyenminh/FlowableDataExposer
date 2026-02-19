@@ -1,6 +1,7 @@
 package vn.com.fecredit.flowable.exposer.service.metadata;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.List;
 
@@ -11,6 +12,7 @@ import java.util.List;
  * <p>Fields are intentionally public to simplify Jackson deserialization
  * and make test fixtures concise.</p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class MetadataDefinition {
     @JsonProperty("class")
     public String _class; // 'class' is a reserved word in Java so JSON maps to _class

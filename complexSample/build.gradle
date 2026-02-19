@@ -16,13 +16,19 @@ java {
 repositories { mavenCentral() }
 
 dependencies {
-  implementation project(':core')
+    implementation project(':core')
   implementation 'org.springframework.boot:spring-boot-starter'
   implementation 'org.springframework.boot:spring-boot-starter-web'
   implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-  // Use the process-only starter to avoid initializing Flowable App/Idm/Form engines
-  // (these create duplicate schema objects in H2 during tests)
+  // Use the process-only Flowable starter to avoid initializing App/Idm/Form engines which create duplicate schema objects in H2 during tests
   implementation "org.flowable:flowable-spring-boot-starter-process:${flowableVersion}"
+  // Add Flowable engine starters used by tests (App/Idm/Form/Cmmn/Dmn/EventRegistry)
+  implementation "org.flowable:flowable-spring-boot-starter-cmmn:${flowableVersion}"
+  // Ensure the CMMN engine implementation and Spring integration are present (resolves NoClassDefFoundError)
+  implementation "org.flowable:flowable-cmmn-engine:${flowableVersion}"
+  implementation "org.flowable:flowable-cmmn-engine-configurator:${flowableVersion}"
+  implementation "org.flowable:flowable-cmmn-spring-configurator:${flowableVersion}"
+  implementation "org.flowable:flowable-cmmn-spring:${flowableVersion}"
   // JSON Schema validator used by MetadataController for strict validation
   implementation 'com.networknt:json-schema-validator:3.0.0'
 

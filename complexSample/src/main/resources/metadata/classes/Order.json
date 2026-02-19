@@ -1,20 +1,25 @@
 {
+  "$schema": "/metadata/work-class-schema.json",
   "class": "Order",
   "parent": "WorkObject",
   "entityType": "Order",
+  "tableName": "case_plain_order",
   "version": 1,
   "enabled": true,
-  "description": "Order example mappings",
+  "description": "Order work-class metadata aligned to work-class-schema.json",
   "jsonPath": "$",
   "fields": [
     {
-      "name": "total_amount",
+      "name": "order_total",
       "jsonPath": "$.total",
       "type": "decimal",
-      "nullable": false,
-      "plainColumn": "order_total"
+      "nullable": false
     },
-    { "name": "customer", "jsonPath": "$.customer", "type": "Customer" },
+    {
+      "name": "customer",
+      "jsonPath": "$.customer",
+      "type": "Customer"
+    },
     {
       "name": "meta",
       "jsonPath": "$.meta",
@@ -26,7 +31,7 @@
       "type": "ApprovalDecision"
     },
     {
-      "name": "discount",
+      "name": "orderRule",
       "jsonPath": "$.orderRule",
       "type": "OrderRules"
     },
@@ -37,63 +42,9 @@
       "isArray": true
     },
     {
-      "name": "color_attr",
+      "name": "params",
       "jsonPath": "$.params",
       "type": "Params"
-    }
-  ],
-  "exponsing": [
-    {
-      "jsonPath": "$.total",
-      "type": "decimal",
-      "nullable": false,
-      "plainColumn": "order_total"
-    },
-    {
-      "jsonPath": "$.customer.id",
-      "type": "string",
-      "plainColumn": "customer_id"
-    },
-    {
-      "jsonPath": "$.customer.name",
-      "type": "string",
-      "plainColumn": "customer_name"
-    },
-    {
-      "jsonPath": "$.meta.priority",
-      "type": "string",
-      "plainColumn": "order_priority"
-    },
-    {
-      "jsonPath": "$.approvalDecision.status",
-      "type": "string",
-      "plainColumn": "approval_status"
-    },
-    {
-      "jsonPath": "$.approvalDecision.reason",
-      "type": "string",
-      "plainColumn": "decision_reason"
-    },
-    {
-      "jsonPath": "$.orderRule.discount",
-      "type": "decimal",
-      "plainColumn": "discount"
-    },
-    {
-      "jsonPath": "$.orderRule.shippingFee",
-      "type": "decimal",
-      "plainColumn": "shipping_fee"
-    },
-    {
-      "jsonPath": "$.items(0).id",
-      "type": "string",
-      "plainColumn": "item_1_id"
-    },
-    {
-      "jsonPath": "$.params.color",
-      "type": "string",
-      "nullable": true,
-      "name": "color_attr"
     }
   ]
 }

@@ -1,6 +1,8 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
@@ -12,6 +14,8 @@ import java.util.*;
  * This version breaks resolve steps into small helpers to satisfy file/method size rules.
  */
 public final class MetadataResolveEngine {
+    private static final Logger log = LoggerFactory.getLogger(MetadataResolveEngine.class);
+
     private final SysExposeClassDefRepository repo;
     private final MetadataResourceLoader resourceLoader;
     private final ObjectMapper mapper;
@@ -34,20 +38,28 @@ public final class MetadataResolveEngine {
     public Result resolveAndFlatten(String classOrEntityType) {
         Map<String, List<String>> diagnostics = new HashMap<>();
         try {
+            log.debug("resolveAndFlatten - start for='{}'", classOrEntityType);
             List<String> candidates = buildCandidates(classOrEntityType);
+            log.trace("resolveAndFlatten - candidates={}", candidates);
             MetadataDefinition md = loadDefinitionForCandidates(candidates);
-            if (md == null) return new Result(Collections.emptyMap(), diagnostics);
+            if (md == null) {
+                log.debug("resolveAndFlatten - no definition found for {}", classOrEntityType);
+                return new Result(Collections.emptyMap(), diagnostics);
+            }
 
             List<MetadataDefinition> chain = buildInheritanceChain(md, diagnostics);
             Map<String, MetadataDefinition.FieldMapping> merged = new LinkedHashMap<>();
 
             for (MetadataDefinition def : chain) {
+                log.trace("resolveAndFlatten - applying mixins/mappings for class={}", def._class);
                 applyMixins(def, merged, chain, diagnostics);
                 applyMappings(def, merged, chain, diagnostics);
             }
 
+            log.debug("resolveAndFlatten - merged keys={}", merged.keySet());
             return new Result(merged, diagnostics);
         } catch (Exception e) {
+            log.error("resolveAndFlatten - unexpected error for {}", classOrEntityType, e);
             return new Result(Collections.emptyMap(), diagnostics);
         }
     }
@@ -73,16 +85,29 @@ public final class MetadataResolveEngine {
         for (String cand : candidates) {
             try {
                 Optional<SysExposeClassDef> dbDef = repo.findLatestEnabledByEntityType(cand);
-                if (dbDef.isPresent()) return mapper.readValue(dbDef.get().getJsonDefinition(), MetadataDefinition.class);
+                if (dbDef.isPresent()) {
+                    log.debug("loadDefinitionForCandidates - found DB override for candidate='{}' id={}", cand, dbDef.get().getId());
+                    String jd = dbDef.get().getJsonDefinition();
+                    log.trace("loadDefinitionForCandidates - DB jsonDefinition: {}", jd);
+                    return mapper.readValue(jd, MetadataDefinition.class);
+                }
             } catch (Exception ex) {
-                // ignore and continue
+                log.debug("loadDefinitionForCandidates - db lookup failed for candidate='{}': {}", cand, ex.getMessage());
             }
         }
         for (String cand : candidates) {
             Optional<MetadataDefinition> opt = resourceLoader.getByClass(cand);
-            if (opt.isPresent()) return opt.get();
+            if (opt.isPresent()) {
+                log.debug("loadDefinitionForCandidates - found resource file for class='{}'", cand);
+                return opt.get();
+            }
         }
         Optional<MetadataDefinition> found = resourceLoader.findByEntityTypeOrClassCandidates(candidates);
+        if (found.isPresent()) {
+            log.debug("loadDefinitionForCandidates - found by entityType candidate resolution for candidates={}", candidates);
+        } else {
+            log.debug("loadDefinitionForCandidates - no definition located for candidates={}", candidates);
+        }
         return found.orElse(null);
     }
 
@@ -130,11 +155,17 @@ public final class MetadataResolveEngine {
                 }
                 if (mixin == null || mixin.mappings == null) continue;
                 for (MetadataDefinition.FieldMapping fm : mixin.mappings) {
-                    if (fm.remove != null && fm.remove) { merged.remove(fm.column); continue; }
+                    if (fm.remove != null && fm.remove) {
+                        // attempt to remove by column or plainColumn
+                        if (fm.column != null) merged.remove(fm.column);
+                        else if (fm.plainColumn != null) merged.remove(fm.plainColumn);
+                        continue;
+                    }
                     MetadataDefinition.FieldMapping fmCopy = MetadataResolveHelpers.cloneMappingWithProvenance(fm, mixin, "file");
                     MetadataResolveHelpers.checkTypeConflict(def._class, merged, fmCopy, diagnostics);
                     resolveNestedJsonPathIfNeeded(fmCopy);
-                    merged.put(fmCopy.column, fmCopy);
+                    String key = (fmCopy.column != null && !fmCopy.column.isBlank()) ? fmCopy.column : (fmCopy.plainColumn != null && !fmCopy.plainColumn.isBlank() ? fmCopy.plainColumn : fmCopy.jsonPath);
+                    merged.put(key, fmCopy);
                 }
             } catch (Exception ex) {
                 addDiagnostic(diagnostics, def._class, "mixin resolution failed for " + mixinName + ": " + ex.getMessage());
@@ -145,11 +176,22 @@ public final class MetadataResolveEngine {
     private void applyMappings(MetadataDefinition def, Map<String, MetadataDefinition.FieldMapping> merged, List<MetadataDefinition> chain, Map<String, List<String>> diagnostics) {
         if (def.mappings == null) return;
         for (MetadataDefinition.FieldMapping fm : def.mappings) {
-            if (fm.remove != null && fm.remove) { merged.remove(fm.column); continue; }
+            if (fm.remove != null && fm.remove) {
+                // attempt to remove by known keys
+                if (fm.column != null) merged.remove(fm.column);
+                else if (fm.plainColumn != null) merged.remove(fm.plainColumn);
+                continue;
+            }
             MetadataDefinition.FieldMapping fmToApply = MetadataResolveHelpers.cloneMappingWithProvenance(fm, def, "file");
             resolveNestedJsonPathWithChain(fmToApply, chain);
             MetadataResolveHelpers.checkTypeConflict(def._class, merged, fmToApply, diagnostics);
-            merged.put(fmToApply.column, fmToApply);
+            // Key mappings consistently: prefer explicit column, then plainColumn, then jsonPath
+            String key = (fmToApply.column != null && !fmToApply.column.isBlank()) ? fmToApply.column
+                    : (fmToApply.plainColumn != null && !fmToApply.plainColumn.isBlank() ? fmToApply.plainColumn : fmToApply.jsonPath);
+            if ((fmToApply.column == null || fmToApply.column.isBlank()) && key != null && !key.equals(fmToApply.jsonPath)) {
+                fmToApply.column = key;
+            }
+            merged.put(key, fmToApply);
         }
     }
 

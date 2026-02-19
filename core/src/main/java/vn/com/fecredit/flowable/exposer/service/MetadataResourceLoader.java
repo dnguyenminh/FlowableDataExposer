@@ -86,18 +86,62 @@ public class MetadataResourceLoader {
                 return;
             }
 
-            MetadataDefinition def = mapper.readValue(txt, MetadataDefinition.class);
-            System.out.println("  Deserialized parent: " + def.parent);
-            if (def == null || def._class == null) {
-                System.out.println("Skipping due to null def or class: " + r.getFilename());
+            // Parse JSON tree so we can infer common aliases (workClassReference/workClass) for the canonical 'class' value
+            var root = mapper.readTree(txt);
+            String inferredClass = null;
+            if (root.has("class")) {
+                inferredClass = root.get("class").asText();
+            } else if (root.has("workClassReference")) {
+                inferredClass = root.get("workClassReference").asText();
+            } else if (root.has("workClass")) {
+                inferredClass = root.get("workClass").asText();
+            }
+
+            MetadataDefinition def = mapper.treeToValue(root, MetadataDefinition.class);
+            System.out.println("  Deserialized parent: " + (def != null ? def.parent : "<null>"));
+
+            if (def == null) {
+                System.out.println("Skipping due to null def: " + r.getFilename());
                 return;
             }
+
+            // Backfill _class when not provided explicitly but referenced via workClassReference/workClass
+            if (def._class == null && inferredClass != null && !inferredClass.isBlank()) {
+                def._class = inferredClass;
+                System.out.println("  Inferred class '" + inferredClass + "' for resource: " + r.getFilename());
+            }
+
+            if (def._class == null) {
+                System.out.println("Skipping due to null def._class: " + r.getFilename());
+                return;
+            }
+
             if (Boolean.TRUE.equals(def.deprecated) || (def.migratedToModule != null && !def.migratedToModule.isBlank())) {
                 System.out.println("Skipping deprecated/migrated file: " + r.getFilename());
                 log.debug("Skipping migrated/ deprecated metadata file: {} -> class={} migratedTo={}", r.getFilename(), def._class, def.migratedToModule);
                 return;
             }
-            fileDefs.put(def._class, def);
+
+            // If we already have a file-backed definition for this class, merge mappings instead of replacing
+            MetadataDefinition existing = fileDefs.get(def._class);
+            if (existing != null) {
+                System.out.println("Merging metadata file into existing class def: " + r.getFilename() + " -> class=" + def._class);
+                // prefer existing tableName unless this resource defines it
+                if ((existing.tableName == null || existing.tableName.isBlank()) && def.tableName != null) existing.tableName = def.tableName;
+                if (existing.entityType == null || existing.entityType.isBlank()) existing.entityType = def.entityType;
+                if (def.mappings != null && !def.mappings.isEmpty()) {
+                    if (existing.mappings == null) existing.mappings = new java.util.ArrayList<>();
+                    existing.mappings.addAll(def.mappings);
+                }
+                if (def.fields != null && !def.fields.isEmpty()) {
+                    if (existing.fields == null) existing.fields = new java.util.ArrayList<>();
+                    existing.fields.addAll(def.fields);
+                }
+                // leave other provenance as-is; update map
+                fileDefs.put(existing._class, existing);
+            } else {
+                fileDefs.put(def._class, def);
+            }
             System.out.println("Successfully loaded metadata file: " + r.getFilename() + " -> class=" + def._class);
             log.debug("Loaded metadata file: {} -> class={} entityType={}", r.getFilename(), def._class, def.entityType);
         } catch (Exception ex) {

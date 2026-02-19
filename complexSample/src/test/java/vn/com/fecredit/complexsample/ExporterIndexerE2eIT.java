@@ -28,6 +28,8 @@ public class ExporterIndexerE2eIT {
     JdbcTemplate jdbc;
     @Autowired
     org.springframework.context.ApplicationContext ctx;
+    @Autowired
+    vn.com.fecredit.flowable.exposer.service.MetadataResolver resolver;
 
     @Test
     void exporter_and_indexer_end_to_end() {
@@ -39,9 +41,30 @@ public class ExporterIndexerE2eIT {
                 .until(() -> {
                     try {
                         Integer cnt = jdbc.queryForObject("SELECT count(*) FROM sys_case_data_store WHERE case_instance_id = ?", Integer.class, caseInstanceId);
+                        System.out.println("DEBUG: Query for case " + caseInstanceId + " returned count: " + cnt);
                         return cnt != null && cnt > 0;
-                    } catch (Exception e) { return false; }
+                    } catch (Exception e) {
+                        System.out.println("DEBUG: Query failed with exception: " + e.getClass().getName() + ": " + e.getMessage());
+                        return false;
+                    }
                 });
+
+        // dump sys_expose_class_def for diagnostics
+        try {
+            var rows = jdbc.queryForList("SELECT * FROM sys_expose_class_def");
+            System.out.println("DEBUG: sys_expose_class_def rows: " + rows.size());
+            for (var r : rows) System.out.println("DEBUG: classDef row => " + r);
+        } catch (Exception e) {
+            System.out.println("DEBUG: failed to query sys_expose_class_def: " + e.getClass().getName() + ": " + e.getMessage());
+        }
+
+        // print resolver result for Order
+        try {
+            System.out.println("DEBUG: resolver.mappingsFor(Order) => " + resolver.mappingsFor("Order"));
+            System.out.println("DEBUG: resolver.resolveForClass(Order) => " + resolver.resolveForClass("Order"));
+        } catch (Exception e) {
+            System.out.println("DEBUG: resolver lookup failed: " + e.getClass().getName() + ": " + e.getMessage());
+        }
 
         // trigger reindex endpoint
         try { rest.postForEntity("http://localhost:" + port + "/api/orders/" + caseInstanceId + "/reindex", null, Void.class); } catch (Exception ignored) {}
@@ -62,6 +85,13 @@ public class ExporterIndexerE2eIT {
     }
 
     void ensureSchema() {
+        jdbc.execute("CREATE TABLE IF NOT EXISTS sys_case_data_store (" +
+                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
+                "case_instance_id VARCHAR(255) NOT NULL, " +
+                "entity_type VARCHAR(255), " +
+                "payload CLOB, " +
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                "version INT DEFAULT 1)");
         jdbc.execute("CREATE TABLE IF NOT EXISTS case_plain_order (" +
                 "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
                 "case_instance_id VARCHAR(255) NOT NULL, " +
@@ -91,6 +121,8 @@ public class ExporterIndexerE2eIT {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         Map<String,Object> respBody = response.getBody();
         assertThat(respBody).isNotNull().containsKey("id");
-        return String.valueOf(respBody.get("id"));
+        String caseId = String.valueOf(respBody.get("id"));
+        System.out.println("DEBUG: startOrderCase returned ID: " + caseId);
+        return caseId;
     }
 }

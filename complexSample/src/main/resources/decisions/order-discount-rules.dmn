@@ -1,8 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
-             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
-             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
-             xmlns:flowable="http://flowable.org/dmn" xmlns:design="http://flowable.org/design"
-             id="definition_orderDiscountRules" name="Order Discount Rules" namespace="http://www.flowable.org/dmn">
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:flowable="http://flowable.org/dmn"
+             xmlns:design="http://flowable.org/design" id="definition_orderDiscountRules" name="Order Discount Rules"
+             namespace="http://www.flowable.org/dmn">
     <decision id="orderDiscountRules" name="Order Discount Rules">
         <decisionTable id="decisionTable_orderDiscountRules" hitPolicy="FIRST">
             <input label="Hạng khách hàng">
@@ -15,51 +15,51 @@
                     <text>orderValue</text>
                 </inputExpression>
             </input>
-            <output id="outputExpression_1" label="Tỉ lệ chiết khấu" name="discountPercent" typeRef="number"></output>
-            <output id="outputExpression_2" label="Phí vận chuyển" name="shippingFee" typeRef="number"></output>
+            <output id="outputExpression_1" label="Tỉ lệ chiết khấu" name="discountPercent" typeRef="number"/>
+            <output id="outputExpression_2" label="Phí vận chuyển" name="shippingFee" typeRef="number"/>
             <rule>
                 <inputEntry id="inputEntry_1_1">
-                    <text><![CDATA[-]]></text>
+                    <text>-</text>
                 </inputEntry>
                 <inputEntry id="inputEntry_2_1">
-                    <text><![CDATA[-]]></text>
+                    <text>-</text>
                 </inputEntry>
                 <outputEntry id="outputEntry_1_1">
-                    <text><![CDATA[15]]></text>
+                    <text>15</text>
                 </outputEntry>
                 <outputEntry id="outputEntry_2_1">
-                    <text><![CDATA[0]]></text>
+                    <text>0</text>
                 </outputEntry>
             </rule>
             <rule>
                 <inputEntry id="inputEntry_1_2">
-                    <text><![CDATA[-]]></text>
+                    <text>-</text>
                 </inputEntry>
                 <inputEntry id="inputEntry_2_2">
-                    <text><![CDATA[-]]></text>
+                    <text>-</text>
                 </inputEntry>
                 <outputEntry id="outputEntry_1_2">
-                    <text><![CDATA[5]]></text>
+                    <text>5</text>
                 </outputEntry>
                 <outputEntry id="outputEntry_2_2">
-                    <text><![CDATA[20000]]></text>
+                    <text>20000</text>
                 </outputEntry>
             </rule>
             <rule>
                 <inputEntry id="inputEntry_1_3">
-                    <text><![CDATA[-]]></text>
+                    <text>-</text>
                 </inputEntry>
                 <inputEntry id="inputEntry_2_3">
-                    <text><![CDATA[-]]></text>
+                    <text>-</text>
                 </inputEntry>
                 <outputEntry id="outputEntry_1_3">
-                    <text><![CDATA[0]]></text>
+                    <text>0</text>
                 </outputEntry>
                 <outputEntry id="outputEntry_2_3">
-                    <text><![CDATA[30000]]></text>
+                    <text>30000</text>
                 </outputEntry>
             </rule>
         </decisionTable>
     </decision>
-    <dmndi:DMNDI></dmndi:DMNDI>
+    <dmndi:DMNDI/>
 </definitions>

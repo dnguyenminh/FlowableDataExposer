@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "Meta",
   "parent": "DataObject",
   "description": "Metadata for the order",

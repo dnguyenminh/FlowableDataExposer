@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "ApprovalDecision",
   "parent": "DataObject",
   "description": "Decision result from approval flow",

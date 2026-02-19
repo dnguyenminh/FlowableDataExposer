@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "Customer",
   "parent": "DataObject",
   "description": "Customer nested object",

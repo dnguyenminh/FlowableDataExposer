@@ -21,6 +21,8 @@ public class MetadataValidationUtil {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final String SCHEMA_PATH = "metadata/work-class-schema.json";
     private static final String SCHEMA_CLASS_PATH = "metadata/classes";
+    private static final String EXPOSE_MAPPING_SCHEMA = "metadata/expose-mapping-schema.json";
+    private static final String INDEX_MAPPING_SCHEMA = "metadata/index-mapping-schema.json";
 
     /**
      * Validation result containing details about validation success/failure
@@ -97,21 +99,71 @@ public class MetadataValidationUtil {
             String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             JsonNode metadataNode = mapper.readTree(content);
 
-            // Load the schema
-            JsonNode schemaNode = loadSchema();
-            if (schemaNode == null) {
-                errors.add("Work Class Metadata Schema not found on classpath");
-                return new ValidationResult(false, errors, warnings);
-            }
+            // If the metadata explicitly declares a $schema, use it. Otherwise try a set of known metadata schemas in order.
+            if (metadataNode.has("$schema") && metadataNode.get("$schema").isTextual()) {
+                String schemaPointer = metadataNode.get("$schema").asText();
+                JsonNode schemaNode = loadSchema(schemaPointer);
+                if (schemaNode == null) {
+                    errors.add("Metadata schema not found on classpath: " + schemaPointer);
+                    return new ValidationResult(false, errors, warnings);
+                }
+                validateAgainstSchema(metadataNode, schemaNode, errors);
+            } else {
+                // Try a sequence of schemas: class-schema, work-class-schema, expose-mapping-schema, index-mapping-schema
+                JsonNode classSchema = loadSchema("metadata/class-schema.json");
+                List<String> classErrors = new ArrayList<>();
+                if (classSchema != null) {
+                    validateAgainstSchema(metadataNode, classSchema, classErrors);
+                }
 
-            // Validate against schema
-            validateAgainstSchema(metadataNode, schemaNode, errors);
+                if (classErrors.isEmpty()) {
+                    warnings.add("Validated against class-schema.json");
+                } else {
+                    JsonNode workSchema = loadSchema(SCHEMA_PATH);
+                    List<String> workErrors = new ArrayList<>();
+                    if (workSchema != null) {
+                        validateAgainstSchema(metadataNode, workSchema, workErrors);
+                    }
+
+                    if (workErrors.isEmpty()) {
+                        warnings.add("Validated against work-class-schema.json");
+                    } else {
+                        // Try expose mapping schema
+                        JsonNode exposeSchema = loadSchema(EXPOSE_MAPPING_SCHEMA);
+                        List<String> exposeErrors = new ArrayList<>();
+                        if (exposeSchema != null) {
+                            validateAgainstSchema(metadataNode, exposeSchema, exposeErrors);
+                        }
+
+                        if (exposeErrors.isEmpty()) {
+                            warnings.add("Validated against expose-mapping-schema.json");
+                        } else {
+                            // Try index mapping schema
+                            JsonNode indexSchema = loadSchema(INDEX_MAPPING_SCHEMA);
+                            List<String> indexErrors = new ArrayList<>();
+                            if (indexSchema != null) {
+                                validateAgainstSchema(metadataNode, indexSchema, indexErrors);
+                            }
+
+                            if (indexErrors.isEmpty()) {
+                                warnings.add("Validated against index-mapping-schema.json");
+                            } else {
+                                // None validated cleanly: merge diagnostics from earlier attempts
+                                errors.addAll(classErrors);
+                                errors.addAll(workErrors);
+                                errors.addAll(exposeErrors);
+                                errors.addAll(indexErrors);
+                            }
+                        }
+                    }
+                }
+            }
 
             // Validate parent class if exists
             if (metadataNode.has("parent")) {
                 String parentClass = metadataNode.get("parent").asText();
                 String parentPath = SCHEMA_CLASS_PATH + "/" + parentClass + ".json";
-                
+
                 if (visitedClasses.contains(parentClass)) {
                     errors.add("Circular parent reference detected: " + parentClass);
                 } else {
@@ -137,8 +189,15 @@ public class MetadataValidationUtil {
      * Loads the Work Class Metadata Schema from classpath.
      */
     private static JsonNode loadSchema() {
+        return loadSchema(SCHEMA_PATH);
+    }
+
+    private static JsonNode loadSchema(String schemaPointer) {
         try {
-            InputStream is = MetadataValidationUtil.class.getClassLoader().getResourceAsStream(SCHEMA_PATH);
+            String path = schemaPointer;
+            // Normalize leading slash if present
+            if (path.startsWith("/")) path = path.substring(1);
+            InputStream is = MetadataValidationUtil.class.getClassLoader().getResourceAsStream(path);
             if (is == null) {
                 return null;
             }
@@ -315,4 +374,3 @@ public class MetadataValidationUtil {
         return validateMetadataFile(resourcePath);
     }
 }
-

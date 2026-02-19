@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/class-schema.json",
   "class": "Params",
   "parent": "DataObject",
   "description": "Aux parameters",

@@ -17,8 +17,10 @@ import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Background worker responsible for consuming {@code SysExposeRequest}s
@@ -95,7 +97,10 @@ public class CaseDataWorker {
 
             var directFallbacks = CaseDataWorkerHelpers.extractDirectFallbacks(annotatedJson);
 
-            upsertPlain(caseInstanceId, annotatedJson, rowCreatedAt, effectiveMappings, legacyMappings, directFallbacks);
+            log.debug("reindexByCaseInstanceId - resolved entityType={}, mappings.count={}, legacy.count={}, directFallbacks.count={}",
+                    entityType, mappings == null ? 0 : mappings.size(), legacyMappings == null ? 0 : legacyMappings.size(), directFallbacks == null ? 0 : directFallbacks.size());
+
+            upsertPlain(entityType, caseInstanceId, annotatedJson, rowCreatedAt, effectiveMappings, legacyMappings, directFallbacks);
 
             log.info("reindexByCaseInstanceId - completed for {}", caseInstanceId);
 
@@ -139,14 +144,18 @@ public class CaseDataWorker {
         return Collections.emptyMap();
     }
 
-    private void upsertPlain(String caseInstanceId, String annotatedJson, Object rowCreatedAt,
+    private void upsertPlain(String entityType, String caseInstanceId, String annotatedJson, Object rowCreatedAt,
                              Map<String, MetadataDefinition.FieldMapping> effectiveMappings,
                              Map<String, String> legacyMappings, Map<String, Object> directFallbacks) {
         try {
-            // Validate metadata schema and extract required fields
-            MetadataDefinition metaDef = resolver.resolveForClass(caseInstanceId);
+            // Trace metadata resolution
+            MetadataDefinition metaDef = resolver.resolveForClass(entityType);
+            log.info("upsertPlain: resolver.resolveForClass({}) => {}", entityType, metaDef == null ? null : metaDef._class);
+            if (metaDef != null) log.debug("upsertPlain: resolved metadata json: {}", om.writeValueAsString(metaDef));
+
+            // Validate metadata schema and extract required fields for the entity type
             if (!validateWorkClassMetadataSchema(metaDef)) {
-                log.warn("upsertPlain: metadata does not conform to Work Class Metadata Schema for case {}", caseInstanceId);
+                log.warn("upsertPlain: metadata does not conform to Work Class Metadata Schema for case {} (entityType={})", caseInstanceId, entityType);
                 return;
             }
 
@@ -158,6 +167,41 @@ public class CaseDataWorker {
 
             // Build row values from effective mappings and annotated JSON
             Map<String, Object> rowValues = buildRowValues(caseInstanceId, annotatedJson, rowCreatedAt, effectiveMappings, legacyMappings, directFallbacks);
+
+            // Diagnostic logging: resolved mappings and final row values
+            try {
+                if (effectiveMappings != null && !effectiveMappings.isEmpty()) {
+                    log.info("upsertPlain: effectiveMappings.count={}", effectiveMappings.size());
+                    effectiveMappings.forEach((k, fm) -> {
+                        try {
+                            log.info("upsertPlain: mapping key={} jsonPath={} plainColumn={}", k, fm == null ? null : fm.jsonPath, fm == null ? null : fm.plainColumn);
+                        } catch (Exception ignore) {
+                        }
+                    });
+                }
+                if (legacyMappings != null && !legacyMappings.isEmpty()) {
+                    log.info("upsertPlain: legacyMappings.count={}", legacyMappings.size());
+                    legacyMappings.forEach((k, v) -> log.info("upsertPlain: legacy mapping {} -> {}", k, v));
+                }
+                if (directFallbacks != null && !directFallbacks.isEmpty()) {
+                    log.info("upsertPlain: directFallbacks.count={}", directFallbacks.size());
+                }
+
+                log.info("upsertPlain: final rowValues for case {} (table={}):", caseInstanceId, metaDef.tableName);
+                rowValues.forEach((k, v) -> {
+                    String type = v == null ? "null" : v.getClass().getSimpleName();
+                    String sval = "null";
+                    try {
+                        if (v != null) {
+                            sval = v instanceof String ? (v.toString().length() > 200 ? v.toString().substring(0, 200) + "..." : v.toString()) : v.toString();
+                        }
+                    } catch (Exception ignore) {
+                    }
+                    log.info("  column={} type={} value={}", k, type, sval);
+                });
+            } catch (Exception ex) {
+                log.debug("upsertPlain: diagnostic logging failed: {}", ex.getMessage());
+            }
 
             // Dynamically insert/upsert the row into the table specified by metadata
             upsertRowByMetadata(metaDef.tableName, rowValues);
@@ -207,12 +251,29 @@ public class CaseDataWorker {
 
                 try {
                     Object extractedValue = JsonPath.read(annotatedJson, fm.jsonPath);
+                    Object valueToPut = extractedValue;
+                    // Convert complex JSON structures (maps/arrays) into a JSON string for DB persistence
+                    if (extractedValue != null
+                            && !(extractedValue instanceof String)
+                            && !(extractedValue instanceof Number)
+                            && !(extractedValue instanceof Boolean)
+                            && !(extractedValue instanceof java.time.temporal.Temporal)
+                            && !(extractedValue instanceof java.util.Date)) {
+                        try {
+                            valueToPut = om.writeValueAsString(extractedValue);
+                        } catch (Exception se) {
+                            // fallback to toString()
+                            valueToPut = extractedValue.toString();
+                        }
+                    }
+
                     // Use plainColumn if specified, otherwise fall back to column name
                     String columnName = fm.plainColumn != null && !fm.plainColumn.trim().isEmpty()
                             ? fm.plainColumn
                             : fm.column;
                     if (columnName != null && !columnName.trim().isEmpty()) {
-                        rowValues.put(columnName, extractedValue);
+                        rowValues.put(columnName, valueToPut);
+                        log.debug("buildRowValues: mapped jsonPath {} -> column {} (value type={})", fm.jsonPath, columnName, valueToPut == null ? "null" : valueToPut.getClass().getSimpleName());
                     }
                 } catch (Exception ex) {
                     log.debug("Failed to extract value for column {} using jsonPath {}: {}", entry.getKey(), fm.jsonPath, ex.getMessage());
@@ -244,6 +305,11 @@ public class CaseDataWorker {
                     rowValues.put(key, value);
                 }
             });
+        }
+
+        // Ensure plain_payload contains the full annotated JSON when not explicitly set by mappings
+        if (!rowValues.containsKey("plain_payload")) {
+            rowValues.put("plain_payload", annotatedJson);
         }
 
         // Set created_at timestamp if provided and not already set
@@ -280,13 +346,40 @@ public class CaseDataWorker {
                 log.info("upsertRowByMetadata: successfully created table {}", tableName);
             }
 
+            // Ensure all columns referenced in rowValues exist before attempting insert
+            ensureColumnsPresent(tableName, rowValues);
+
             // Build dynamic upsert SQL
             String upsertSql = buildUpsertSql(tableName, rowValues);
             log.debug("upsertRowByMetadata: executing SQL for table {} with {} columns", tableName, rowValues.size());
 
             // Execute the upsert with parameterized values
             Object[] paramValues = rowValues.values().toArray();
-            jdbc.update(upsertSql, paramValues);
+            try {
+                jdbc.update(upsertSql, paramValues);
+            } catch (org.springframework.jdbc.BadSqlGrammarException badSql) {
+                String msg = badSql.getMessage();
+                // H2 reports: Column "X" not found
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("Column \"([^\"]+)\" not found").matcher(msg);
+                if (m.find()) {
+                    String missingCol = m.group(1);
+                    log.warn("upsertRowByMetadata: detected missing column {} on table {} — attempting ALTER TABLE to add it", missingCol, tableName);
+                    try {
+                        Object sample = rowValues.get(missingCol);
+                        String colType = determineColumnType(sample);
+                        String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, missingCol, colType);
+                        jdbc.execute(alter);
+                        // retry once
+                        jdbc.update(upsertSql, paramValues);
+                        log.info("upsertRowByMetadata: successfully added missing column {} and retried insert", missingCol);
+                    } catch (Exception ex2) {
+                        log.error("upsertRowByMetadata: failed to add missing column {}: {}", missingCol, ex2.getMessage(), ex2);
+                        throw badSql;
+                    }
+                } else {
+                    throw badSql;
+                }
+            }
 
             log.info("upsertRowByMetadata: successfully upserted {} rows into {}", 1, tableName);
         } catch (Exception ex) {
@@ -323,6 +416,49 @@ public class CaseDataWorker {
     }
 
     /**
+     * Ensure all columns referenced in rowValues exist on the table; add them if missing.
+     */
+    private void ensureColumnsPresent(String tableName, Map<String, Object> rowValues) {
+        try {
+            Set<String> existing = getExistingColumns(tableName);
+            for (String col : rowValues.keySet()) {
+                if (col.equalsIgnoreCase("case_instance_id") || col.equalsIgnoreCase("id")) continue;
+                if (existing.contains(col.toUpperCase())) continue;
+                if (!isValidIdentifier(col)) {
+                    log.warn("ensureColumnsPresent: skipping invalid identifier {}", col);
+                    continue;
+                }
+                String colType = determineColumnType(rowValues.get(col));
+                String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, col, colType);
+                try {
+                    jdbc.execute(alter);
+                    log.info("ensureColumnsPresent: added missing column {} to {}", col, tableName);
+                    existing.add(col.toUpperCase());
+                } catch (Exception ex) {
+                    log.warn("ensureColumnsPresent: failed to add column {} to {}: {}", col, tableName, ex.getMessage());
+                }
+            }
+        } catch (Exception ex) {
+            log.debug("ensureColumnsPresent: error checking/adding columns for {}: {}", tableName, ex.getMessage());
+        }
+    }
+
+    private Set<String> getExistingColumns(String tableName) {
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ?", tableName.toUpperCase());
+            Set<String> cols = new HashSet<>();
+            for (Map<String, Object> r : rows) {
+                Object val = r.get("COLUMN_NAME");
+                if (val != null) cols.add(val.toString().toUpperCase());
+            }
+            return cols;
+        } catch (Exception ex) {
+            log.debug("getExistingColumns: fallback - could not query information schema for {}: {}", tableName, ex.getMessage());
+            return new HashSet<>();
+        }
+    }
+
+    /**
      * Creates a default work table with standard columns and indexes.
      * Schema:
      * - id (BIGINT AUTO_INCREMENT PRIMARY KEY)
@@ -347,46 +483,37 @@ public class CaseDataWorker {
 
             // Add standard work columns
             createTableSql.append("plain_payload LONGTEXT, ");
-            createTableSql.append("requested_by VARCHAR(255), ");
+            createTableSql.append("requested_by VARCHAR(255)");
 
-            // Add dynamic columns based on rowValues
-            boolean isFirstColumn = true;
-            for (Map.Entry<String, Object> entry : rowValues.entrySet()) {
-                String columnName = entry.getKey();
-                Object value = entry.getValue();
-
-                // Skip case_instance_id and created_at as they're already defined
-                if (columnName.equals("case_instance_id") || columnName.equals("created_at") || columnName.equals("updated_at")) {
-                    continue;
-                }
-
-                // Skip if column name is invalid
-                if (!isValidIdentifier(columnName)) {
-                    log.warn("createDefaultWorkTable: skipping invalid column name: {}", columnName);
-                    continue;
-                }
-
-                if (!isFirstColumn) {
-                    createTableSql.append(", ");
-                }
-                isFirstColumn = false;
-
-                // Determine column type based on value
-                String columnType = determineColumnType(value);
-                createTableSql.append(columnName).append(" ").append(columnType);
-            }
-
-            // Add timestamp columns
+            // Add timestamp columns (avoid ON UPDATE for H2 compatibility)
             createTableSql.append(", created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
-            createTableSql.append(", updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+            createTableSql.append(", updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 
-            // Add indexes
-            createTableSql.append(", INDEX idx_case_instance_id (case_instance_id)");
-            createTableSql.append(", INDEX idx_created_at (created_at)");
+            // Finish CREATE TABLE (indexes created separately for better cross-DB compatibility)
             createTableSql.append(")");
 
             log.debug("createDefaultWorkTable: executing CREATE TABLE SQL: {}", createTableSql);
             jdbc.execute(createTableSql.toString());
+
+            // Now ensure any dynamic columns are added
+            ensureColumnsPresent(tableName, rowValues);
+
+            // Create indexes separately to avoid dialect-specific CREATE TABLE index syntax
+            try {
+                String idx1 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_case_instance_id ON %s(case_instance_id)", tableName, tableName);
+                String idx2 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at)", tableName, tableName);
+                jdbc.execute(idx1);
+                jdbc.execute(idx2);
+            } catch (Exception exIdx) {
+                // Some DBs may not support IF NOT EXISTS for CREATE INDEX; fall back to plain CREATE INDEX
+                try {
+                    jdbc.execute(String.format("CREATE INDEX idx_%s_case_instance_id ON %s(case_instance_id)", tableName, tableName));
+                } catch (Exception ignored) {}
+                try {
+                    jdbc.execute(String.format("CREATE INDEX idx_%s_created_at ON %s(created_at)", tableName, tableName));
+                } catch (Exception ignored) {}
+            }
+
             log.info("createDefaultWorkTable: successfully created table {} with default schema", tableName);
         } catch (Exception ex) {
             log.error("createDefaultWorkTable: failed to create table {}: {}", tableName, ex.getMessage(), ex);
@@ -444,7 +571,17 @@ public class CaseDataWorker {
         String columns = String.join(", ", columnNames);
         String values = String.join(", ", placeholders);
 
-        // For now, use simple INSERT; database-specific MERGE/ON CONFLICT logic can be added later
+        // Prefer MERGE/UPSERT semantics when case_instance_id is present to avoid duplicate key errors
+        if (rowValues.containsKey("case_instance_id") && isValidIdentifier("case_instance_id")) {
+            // H2 supports: MERGE INTO table (cols...) KEY(case_instance_id) VALUES(...)
+            try {
+                return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+            } catch (Exception ignored) {
+                // fallback to INSERT
+            }
+        }
+
+        // Fallback to simple INSERT
         return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
     }
 
