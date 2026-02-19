@@ -1,0 +1,14 @@
+{
+  "$schema": "/metadata/expose-mapping-schema.json",
+  "workClassReference": "Order",
+  "entityType": "Order",
+  "version": 1,
+  "enabled": true,
+  "jsonPath": "$",
+  "mappings": [
+    { "jsonPath": "$.total", "plainColumn": "order_total", "type": "decimal" },
+    { "jsonPath": "$.customer.id", "plainColumn": "customer_id", "type": "string" },
+    { "jsonPath": "$.priority", "plainColumn": "order_priority", "type": "string" },
+    { "jsonPath": "$.requestedBy", "plainColumn": "requested_by", "type": "string" }
+  ]
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="openbpm-bpm-inspector-state">
+    <option name="statesByFile">
+      <map>
+        <entry key="$PROJECT_DIR$/complexSample/src/main/resources/decisions/order-discount-rules.dmn">
+          <value>
+            <FileInspectorState>
+              <option name="statesByElementId">
+                <map>
+                  <entry key="definition_orderDiscountRules">
+                    <value>
+                      <ExpandedItems>
+                        <option name="items">
+                          <option value="Dmn Root Definitions" />
+                        </option>
+                      </ExpandedItems>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </FileInspectorState>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
