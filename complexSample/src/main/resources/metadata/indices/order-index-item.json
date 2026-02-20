@@ -1,9 +1,11 @@
 {
-  "table": "item_index",
+  "class": "Order",
+  "entityType": "Order",
   "jsonPath": "$.items",
+  "table": "item_index",
   "mappings": [
-    { "jsonPath": "$.id", "plainColumn": "item_id", "type": "VARCHAR(255)" },
-    { "jsonPath": "$.sku", "plainColumn": "sku", "type": "VARCHAR(100)" },
-    { "jsonPath": "$.price", "plainColumn": "price", "type": "DECIMAL(19,4)" }
+    { "jsonPath": "$.id", "plainColumn": "item_id", "type": "VARCHAR(255)", "nullable": false },
+    { "jsonPath": "$.sku", "plainColumn": "sku", "type": "VARCHAR(100)", "nullable": true },
+    { "jsonPath": "$.price", "plainColumn": "price", "type": "DECIMAL(19,4)", "nullable": true }
   ]
 }

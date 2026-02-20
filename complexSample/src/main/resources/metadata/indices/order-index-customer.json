@@ -1,7 +1,10 @@
 {
-  "table": "customer_index",
+  "class": "Order",
+  "entityType": "Order",
   "jsonPath": "$.customer",
+  "table": "customer_index",
   "mappings": [
-    { "jsonPath": "$.id", "plainColumn": "customer_id", "type": "VARCHAR(255)" }
+    { "jsonPath": "$.id", "plainColumn": "customer_id", "type": "VARCHAR(255)", "nullable": false },
+    { "jsonPath": "$.name", "plainColumn": "customer_name", "type": "VARCHAR(255)", "nullable": true }
   ]
 }

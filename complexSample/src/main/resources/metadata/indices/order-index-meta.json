@@ -1,7 +1,9 @@
 {
-  "table": "meta_index",
+  "class": "Order",
+  "entityType": "Order",
   "jsonPath": "$.meta",
+  "table": "meta_index",
   "mappings": [
-    { "jsonPath": "$.priority", "plainColumn": "priority", "type": "VARCHAR(50)" }
+    { "jsonPath": "$.priority", "plainColumn": "priority", "type": "VARCHAR(50)", "nullable": true }
   ]
 }

@@ -1,8 +1,10 @@
 {
-  "table": "approval_decision_index",
+  "class": "Order",
+  "entityType": "Order",
   "jsonPath": "$.approvalDecision",
+  "table": "approval_decision_index",
   "mappings": [
-    { "jsonPath": "$.decision", "plainColumn": "decision", "type": "VARCHAR(100)" },
-    { "jsonPath": "$.reviewer", "plainColumn": "reviewer", "type": "VARCHAR(255)" }
+    { "jsonPath": "$.decision", "plainColumn": "decision", "type": "VARCHAR(100)", "nullable": true },
+    { "jsonPath": "$.reviewer", "plainColumn": "reviewer", "type": "VARCHAR(255)", "nullable": true }
   ]
 }

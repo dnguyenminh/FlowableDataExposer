@@ -1,7 +1,9 @@
 {
-  "table": "order_rule_index",
+  "class": "Order",
+  "entityType": "Order",
   "jsonPath": "$.orderRule",
+  "table": "order_rule_index",
   "mappings": [
-    { "jsonPath": "$.result", "plainColumn": "rule_result", "type": "LONGTEXT" }
+    { "jsonPath": "$.result", "plainColumn": "rule_result", "type": "LONGTEXT", "nullable": true }
   ]
 }

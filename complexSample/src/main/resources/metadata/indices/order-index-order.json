@@ -1,11 +1,13 @@
 {
-  "table": "order_index",
+  "class": "Order",
+  "entityType": "Order",
   "jsonPath": "$",
+  "table": "order_index",
   "mappings": [
-    { "jsonPath": "$.total", "plainColumn": "order_total", "type": "DECIMAL(19,4)" },
-    { "jsonPath": "$.customer.id", "plainColumn": "customer_id", "type": "VARCHAR(255)" },
-    { "jsonPath": "$.meta.priority", "plainColumn": "priority", "type": "VARCHAR(50)" },
-    { "jsonPath": "$.requestedBy", "plainColumn": "requested_by", "type": "VARCHAR(255)" },
-    { "jsonPath": "$.createdAt", "plainColumn": "created_at", "type": "TIMESTAMP" }
+    { "jsonPath": "$.total", "plainColumn": "order_total", "type": "DECIMAL(19,4)", "nullable": false },
+    { "jsonPath": "$.customer.id", "plainColumn": "customer_id", "type": "VARCHAR(255)", "nullable": true },
+    { "jsonPath": "$.meta.priority", "plainColumn": "priority", "type": "VARCHAR(50)", "nullable": true },
+    { "jsonPath": "$.requestedBy", "plainColumn": "requested_by", "type": "VARCHAR(255)", "nullable": true },
+    { "jsonPath": "$.createdAt", "plainColumn": "created_at", "type": "TIMESTAMP", "nullable": true }
   ]
 }
