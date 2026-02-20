@@ -1,8 +1,12 @@
 {
-  "table": "params_index",
+  "$schema": "/metadata/index-mapping-schema.json",
+  "workClassReference": "Order",
+  "class": "Order",
+  "entityType": "Order",
   "jsonPath": "$.params",
+  "table": "params_index",
   "mappings": [
-    { "jsonPath": "$_key", "plainColumn": "param_key", "type": "VARCHAR(255)" },
-    { "jsonPath": "$_value", "plainColumn": "param_value", "type": "LONGTEXT" }
+    { "jsonPath": "$_key", "plainColumn": "param_key", "type": "VARCHAR(255)", "nullable": false },
+    { "jsonPath": "$_value", "plainColumn": "param_value", "type": "LONGTEXT", "nullable": true }
   ]
 }

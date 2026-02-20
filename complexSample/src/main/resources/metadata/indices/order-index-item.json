@@ -1,4 +1,6 @@
 {
+  "$schema": "/metadata/index-mapping-schema.json",
+  "workClassReference": "Order",
   "class": "Order",
   "entityType": "Order",
   "jsonPath": "$.items",
