@@ -2,7 +2,7 @@
   "$schema": "/metadata/index-mapping-schema.json",
   "class": "OrderRules",
   "entityType": "OrderRules",
-  "jsonPath": "$",
+  "jsonPath": "$.rules",
   "table": "order_rule_index",
   "mappings": [
     {
