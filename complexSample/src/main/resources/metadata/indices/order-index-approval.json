@@ -1,12 +1,12 @@
 {
   "$schema": "/metadata/index-mapping-schema.json",
-  "workClassReference": "Order",
-  "class": "Order",
-  "entityType": "Order",
-  "jsonPath": "$.approvalDecision",
+  "workClassReference": "ApprovalDecision",
+  "class": "ApprovalDecision",
+  "entityType": "ApprovalDecision",
+  "jsonPath": "$",
   "table": "approval_decision_index",
   "mappings": [
-    { "jsonPath": "$.decision", "plainColumn": "decision", "type": "VARCHAR(100)", "nullable": true },
-    { "jsonPath": "$.reviewer", "plainColumn": "reviewer", "type": "VARCHAR(255)", "nullable": true }
+    { "jsonPath": "$.status", "plainColumn": "status", "type": "VARCHAR(100)", "nullable": true },
+    { "jsonPath": "$.reason", "plainColumn": "reason", "type": "VARCHAR(255)", "nullable": true }
   ]
 }
