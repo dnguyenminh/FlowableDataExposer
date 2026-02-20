@@ -5,9 +5,9 @@
   "table": "order_rule_index",
   "mappings": [
     {
-      "jsonPath": "$.result",
-      "plainColumn": "rule_result",
-      "type": "LONGTEXT",
+      "jsonPath": "$.discount",
+      "plainColumn": "discount",
+      "type": "DECIMAL(19,4)",
       "nullable": true
     }
   ],
