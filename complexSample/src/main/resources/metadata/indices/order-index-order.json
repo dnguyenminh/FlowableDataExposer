@@ -1,0 +1,11 @@
+{
+  "table": "order_index",
+  "jsonPath": "$",
+  "mappings": [
+    { "jsonPath": "$.total", "plainColumn": "order_total", "type": "DECIMAL(19,4)" },
+    { "jsonPath": "$.customer.id", "plainColumn": "customer_id", "type": "VARCHAR(255)" },
+    { "jsonPath": "$.meta.priority", "plainColumn": "priority", "type": "VARCHAR(50)" },
+    { "jsonPath": "$.requestedBy", "plainColumn": "requested_by", "type": "VARCHAR(255)" },
+    { "jsonPath": "$.createdAt", "plainColumn": "created_at", "type": "TIMESTAMP" }
+  ]
+}

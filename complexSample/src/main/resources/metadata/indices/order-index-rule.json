@@ -1,0 +1,7 @@
+{
+  "table": "order_rule_index",
+  "jsonPath": "$.orderRule",
+  "mappings": [
+    { "jsonPath": "$.result", "plainColumn": "rule_result", "type": "LONGTEXT" }
+  ]
+}

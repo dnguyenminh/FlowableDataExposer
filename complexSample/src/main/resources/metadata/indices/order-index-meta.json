@@ -1,0 +1,7 @@
+{
+  "table": "meta_index",
+  "jsonPath": "$.meta",
+  "mappings": [
+    { "jsonPath": "$.priority", "plainColumn": "priority", "type": "VARCHAR(50)" }
+  ]
+}

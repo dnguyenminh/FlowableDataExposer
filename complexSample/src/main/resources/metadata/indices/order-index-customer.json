@@ -1,0 +1,7 @@
+{
+  "table": "customer_index",
+  "jsonPath": "$.customer",
+  "mappings": [
+    { "jsonPath": "$.id", "plainColumn": "customer_id", "type": "VARCHAR(255)" }
+  ]
+}

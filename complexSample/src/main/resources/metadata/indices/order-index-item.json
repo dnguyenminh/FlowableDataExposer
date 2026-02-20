@@ -1,0 +1,9 @@
+{
+  "table": "item_index",
+  "jsonPath": "$.items",
+  "mappings": [
+    { "jsonPath": "$.id", "plainColumn": "item_id", "type": "VARCHAR(255)" },
+    { "jsonPath": "$.sku", "plainColumn": "sku", "type": "VARCHAR(100)" },
+    { "jsonPath": "$.price", "plainColumn": "price", "type": "DECIMAL(19,4)" }
+  ]
+}

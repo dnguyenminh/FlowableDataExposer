@@ -1,0 +1,8 @@
+{
+  "table": "params_index",
+  "jsonPath": "$.params",
+  "mappings": [
+    { "jsonPath": "$_key", "plainColumn": "param_key", "type": "VARCHAR(255)" },
+    { "jsonPath": "$_value", "plainColumn": "param_value", "type": "LONGTEXT" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "table": "approval_decision_index",
+  "jsonPath": "$.approvalDecision",
+  "mappings": [
+    { "jsonPath": "$.decision", "plainColumn": "decision", "type": "VARCHAR(100)" },
+    { "jsonPath": "$.reviewer", "plainColumn": "reviewer", "type": "VARCHAR(255)" }
+  ]
+}
