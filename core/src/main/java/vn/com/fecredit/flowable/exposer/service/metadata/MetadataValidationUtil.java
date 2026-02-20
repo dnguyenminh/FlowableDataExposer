@@ -177,6 +177,131 @@ public class MetadataValidationUtil {
                 }
             }
 
+            // Additional semantic check: if this file looks like an index mapping (has mappings and references a work class),
+            // ensure each mapping's jsonPath references fields that actually exist on the referenced work class (including nested types).
+            if (metadataNode.has("mappings") && metadataNode.get("mappings").isArray()) {
+                String className = null;
+                if (metadataNode.has("workClassReference")) className = metadataNode.get("workClassReference").asText();
+                else if (metadataNode.has("class")) className = metadataNode.get("class").asText();
+                else if (metadataNode.has("entityType")) className = metadataNode.get("entityType").asText();
+
+                if (className != null && !className.trim().isEmpty()) {
+                    String classPath = SCHEMA_CLASS_PATH + "/" + className + ".json";
+                    InputStream cis = MetadataValidationUtil.class.getClassLoader().getResourceAsStream(classPath);
+                    if (cis == null) {
+                        errors.add("Referenced class metadata not found: " + classPath);
+                    } else {
+                        String ccontent = new String(cis.readAllBytes(), StandardCharsets.UTF_8);
+                        JsonNode classNode = mapper.readTree(ccontent);
+
+                        // Build map of top-level field name -> field definition
+                        // Also index by the top-segment of the field's jsonPath so mappings that use
+                        // the raw jsonPath segment (e.g. "$.total") will match the class field which
+                        // may be named differently (e.g. name=order_total, jsonPath=$.total).
+                        Map<String, JsonNode> topFields = new HashMap<>();
+                        JsonNode fieldsArray = classNode.path("fields");
+                        if (fieldsArray.isArray()) {
+                            for (JsonNode f : fieldsArray) {
+                                if (f.has("name")) {
+                                    String fname = f.get("name").asText();
+                                    topFields.put(fname, f);
+                                }
+
+                                // also index by jsonPath top segment if present
+                                if (f.has("jsonPath") && f.get("jsonPath").isTextual()) {
+                                    String fjson = f.get("jsonPath").asText();
+                                    String normalized = fjson.startsWith("$.") ? fjson.substring(2) : fjson.startsWith("$") ? fjson.substring(1) : fjson;
+                                    int dotIdxFp = normalized.indexOf('.');
+                                    int brIdxFp = normalized.indexOf('[');
+                                    int topEndFp = normalized.length();
+                                    if (dotIdxFp != -1) topEndFp = Math.min(topEndFp, dotIdxFp);
+                                    if (brIdxFp != -1) topEndFp = Math.min(topEndFp, brIdxFp);
+                                    String topSeg = normalized.substring(0, Math.max(0, topEndFp));
+                                    if (!topSeg.isBlank()) topFields.putIfAbsent(topSeg, f);
+                                }
+                            }
+                        }
+
+                        for (JsonNode mapping : metadataNode.get("mappings")) {
+                            String jp = mapping.path("jsonPath").asText(null);
+                            if (jp == null || jp.trim().isEmpty()) continue;
+
+                            // Normalize: remove leading "$" or "$." then split by '.' while handling array indexes
+                            String remainder = jp.startsWith("$.") ? jp.substring(2) : jp.startsWith("$") ? jp.substring(1) : jp;
+                            int dotIdx = remainder.indexOf('.');
+                            int brIdx = remainder.indexOf('[');
+                            int topEnd = remainder.length();
+                            if (dotIdx != -1) topEnd = Math.min(topEnd, dotIdx);
+                            if (brIdx != -1) topEnd = Math.min(topEnd, brIdx);
+                            String topSegment = remainder.substring(0, topEnd);
+
+                            // Special-case: structural map-entry tokens like "$_key" / "$_value" are not real fields
+                            // and should be skipped from semantic existence checks. Also skip any top-segment that
+                            // starts with an underscore (project conventions use $_* for map entries).
+                            if (jp.contains("$_") || (topSegment != null && topSegment.startsWith("_"))) {
+                                // skip semantic validation for structural tokens
+                                continue;
+                            }
+
+                            if (!topFields.containsKey(topSegment)) {
+                                errors.add("Mapping jsonPath '" + jp + "' references unknown top-level field '" + topSegment + "' in class '" + className + "'");
+                            } else {
+                                // If there's a nested segment (e.g. $.customer.id or $.items[0].sku) validate against nested type metadata
+                                if (dotIdx != -1) {
+                                    String afterTop = remainder.substring(dotIdx + 1);
+                                    // extract next segment name
+                                    int nextDot = afterTop.indexOf('.');
+                                    int nextBr = afterTop.indexOf('[');
+                                    int nextEnd = afterTop.length();
+                                    if (nextDot != -1) nextEnd = Math.min(nextEnd, nextDot);
+                                    if (nextBr != -1) nextEnd = Math.min(nextEnd, nextBr);
+                                    String nestedSegment = afterTop.substring(0, nextEnd);
+
+                                    JsonNode topFieldDef = topFields.get(topSegment);
+                                    String topType = topFieldDef.path("type").asText(null);
+                                    String topTypeLower = topType == null ? "" : topType.toLowerCase();
+
+                                    boolean primitive = "string".equals(topTypeLower)
+                                            || "integer".equals(topTypeLower)
+                                            || "int".equals(topTypeLower)
+                                            || "decimal".equals(topTypeLower)
+                                            || "number".equals(topTypeLower)
+                                            || "boolean".equals(topTypeLower)
+                                            || "long".equals(topTypeLower)
+                                            || "double".equals(topTypeLower)
+                                            || "date".equals(topTypeLower)
+                                            || "timestamp".equals(topTypeLower);
+
+                                    if (primitive) {
+                                        errors.add("Mapping jsonPath '" + jp + "' navigates into primitive field '" + topSegment + "' of class '" + className + "'");
+                                    } else if (topType != null && !topType.trim().isEmpty()) {
+                                        String nestedPath = SCHEMA_CLASS_PATH + "/" + topType + ".json";
+                                        InputStream nis = MetadataValidationUtil.class.getClassLoader().getResourceAsStream(nestedPath);
+                                        if (nis == null) {
+                                            errors.add("Mapping jsonPath '" + jp + "' references nested type '" + topType + "' but metadata file not found: " + nestedPath);
+                                        } else {
+                                            String ncontent = new String(nis.readAllBytes(), StandardCharsets.UTF_8);
+                                            JsonNode nestedClass = mapper.readTree(ncontent);
+                                            Map<String, JsonNode> nestedFields = new HashMap<>();
+                                            JsonNode nfArr = nestedClass.path("fields");
+                                            if (nfArr.isArray()) {
+                                                for (JsonNode nf : nfArr) {
+                                                    if (nf.has("name")) nestedFields.put(nf.get("name").asText(), nf);
+                                                }
+                                            }
+
+                                            if (!nestedFields.containsKey(nestedSegment)) {
+                                                errors.add("Mapping jsonPath '" + jp + "' references unknown nested field '" + nestedSegment + "' on type '" + topType + "'");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
         } catch (Exception ex) {
             errors.add("Failed to parse metadata file: " + ex.getMessage());
         }

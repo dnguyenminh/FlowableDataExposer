@@ -5,6 +5,8 @@
   "description": "Item in order",
   "jsonPath": "$.items[*]",
   "fields": [
-    { "name": "id", "jsonPath": "$.id", "type": "string" }
+    { "name": "id", "jsonPath": "$.id", "type": "string" },
+    { "name": "sku", "jsonPath": "$.sku", "type": "string", "nullable": true },
+    { "name": "price", "jsonPath": "$.price", "type": "decimal", "nullable": true }
   ]
 }

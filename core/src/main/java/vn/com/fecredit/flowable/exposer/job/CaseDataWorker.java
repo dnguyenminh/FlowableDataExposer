@@ -46,6 +46,11 @@ public class CaseDataWorker {
     @Autowired
     private vn.com.fecredit.flowable.exposer.service.IndexLoader indexLoader;
 
+    // Cache H2 detection result and common metadata to avoid repeated connection grabs (which can exhaust the pool)
+    private Boolean cachedIsH2 = null;
+    private volatile Set<String> cachedExistingTables = null; // uppercase table names
+    private final java.util.concurrent.ConcurrentHashMap<String, Set<String>> cachedTableColumns = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Scheduled(fixedDelay = 1000)
     public void pollAndProcess() {
         try {
@@ -537,18 +542,40 @@ public class CaseDataWorker {
                     String missingCol = m.group(1);
                     log.warn("upsertRowByMetadata: detected missing column {} on table {} — attempting ALTER TABLE to add it", missingCol, tableName);
                     try {
-                        Object sample = rowValues.get(missingCol);
+                        // Attempt to resolve case-insensitive key mapping
+                        String matchedKey = null;
+                        for (String k : rowValues.keySet()) { if (k.equalsIgnoreCase(missingCol)) { matchedKey = k; break; } }
+                        Object sample = matchedKey == null ? rowValues.get(missingCol) : rowValues.get(matchedKey);
+                        String colNameToAdd = matchedKey == null ? missingCol : matchedKey;
                         String colType = determineColumnType(sample, null);
-                        String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, missingCol, colType);
+                        String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, colNameToAdd, colType);
                         jdbc.execute(alter);
+                        // update cached columns
+                        Set<String> cur = getExistingColumns(tableName);
+                        cur.add(colNameToAdd.toUpperCase(java.util.Locale.ROOT));
+                        cachedTableColumns.put(tableName.toUpperCase(java.util.Locale.ROOT), cur);
                         // retry once
                         jdbc.update(upsertSql, paramValues);
-                        log.info("upsertRowByMetadata: successfully added missing column {} and retried insert", missingCol);
+                        log.info("upsertRowByMetadata: successfully added missing column {} and retried insert", colNameToAdd);
                     } catch (Exception ex2) {
-                        log.error("upsertRowByMetadata: failed to add missing column {}: {}", missingCol, ex2.getMessage(), ex2);
+                        log.warn("upsertRowByMetadata: failed to add missing column {}: {}", missingCol, ex2.getMessage());
+                        // As a robust fallback for H2 where MERGE or complex upsert SQLs can be flaky
+                        if (isH2()) {
+                            try {
+                                log.info("upsertRowByMetadata: falling back to SELECT→UPDATE/INSERT for H2 on table {}", tableName);
+                                h2SelectUpdateInsert(tableName, colOrder, rowValues);
+                                return;
+                            } catch (Exception hx) {
+                                log.error("upsertRowByMetadata: H2 fallback failed: {}", hx.getMessage(), hx);
+                            }
+                        }
                         throw badSql;
                     }
                 } else {
+                    // Other SQL grammar errors: attempt H2 fallback if appropriate
+                    if (isH2()) {
+                        try { h2SelectUpdateInsert(tableName, colOrder, rowValues); return; } catch (Exception hx) { log.error("upsertRowByMetadata: H2 fallback failed: {}", hx.getMessage(), hx); }
+                    }
                     throw badSql;
                 }
             }
@@ -626,7 +653,9 @@ public class CaseDataWorker {
                         String hint = matchedKey == null ? null : hints.get(matchedKey);
                         String colType = determineColumnType(sample, hint);
                         try {
-                            jdbc.execute(String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, (matchedKey == null ? missingCol : matchedKey), colType));
+                            String alterStmt;
+                            alterStmt = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, (matchedKey == null ? missingCol : matchedKey), colType);
+                            jdbc.execute(alterStmt);
                             jdbc.update(upsertSql, params);
                         } catch (Exception ex2) {
                             log.error("upsertRowsByMetadata: failed to add missing column {}: {}", missingCol, ex2.getMessage(), ex2);
@@ -647,16 +676,27 @@ public class CaseDataWorker {
      * Handles database-specific metadata queries gracefully.
      */
     private boolean tableExists(String tableName) {
+        if (tableName == null) return false;
+        String up = tableName.toUpperCase(java.util.Locale.ROOT);
+        // Check cached table set first
+        Set<String> localCached = cachedExistingTables;
+        if (localCached != null && localCached.contains(up)) {
+            log.debug("tableExists (cache): table {} exists = true", tableName);
+            return true;
+        }
         try {
-            // Use JDBC metadata lookup (lighter and avoids relying on INFORMATION_SCHEMA/DATABASE())
             java.sql.Connection conn = null;
             try {
                 conn = jdbc.getDataSource() == null ? null : jdbc.getDataSource().getConnection();
                 if (conn != null) {
-                    String tableUpper = tableName == null ? null : tableName.toUpperCase(java.util.Locale.ROOT);
-                    try (java.sql.ResultSet rs = conn.getMetaData().getTables(null, null, tableUpper, new String[]{"TABLE"})) {
+                    try (java.sql.ResultSet rs = conn.getMetaData().getTables(null, null, up, new String[]{"TABLE"})) {
                         boolean exists = rs.next();
                         log.debug("tableExists (meta): table {} exists = {}", tableName, exists);
+                        if (exists) {
+                            // update cache lazily
+                            if (cachedExistingTables == null) cachedExistingTables = new java.util.HashSet<>();
+                            cachedExistingTables.add(up);
+                        }
                         return exists;
                     }
                 }
@@ -666,10 +706,12 @@ public class CaseDataWorker {
         } catch (Exception ex) {
             log.debug("tableExists: metadata lookup failed for {}: {}", tableName, ex.getMessage());
         }
-        // Fallback: lightweight query that will fail fast if table missing
+        // Fallback: lightweight query (non-throwing)
         try {
             jdbc.queryForObject("SELECT 1 FROM " + tableName + " LIMIT 1", Integer.class);
             log.debug("tableExists: table {} exists (via fallback)", tableName);
+            if (cachedExistingTables == null) cachedExistingTables = new java.util.HashSet<>();
+            cachedExistingTables.add(up);
             return true;
         } catch (Exception ex2) {
             log.debug("tableExists: table {} does not exist (fallback)", tableName);
@@ -732,7 +774,10 @@ public class CaseDataWorker {
                     log.info("ensureColumnsPresent: added missing column {} to {}", col, tableName);
                     existing.add(col.toUpperCase());
                 } catch (Exception ex) {
-                    log.warn("ensureColumnsPresent: failed to add column {} to {}: {}", col, tableName, ex.getMessage());
+                    // If another thread created the column concurrently, that's fine — refresh cache and continue
+                    log.debug("ensureColumnsPresent: failed to add column {} to {}: {} (will refresh cache)", col, tableName, ex.getMessage());
+                    // Refresh cached columns to avoid repeated ALTER attempts
+                    try { cachedTableColumns.remove(tableName.toUpperCase(java.util.Locale.ROOT)); getExistingColumns(tableName); } catch (Exception ignored) {}
                 }
             }
         } catch (Exception ex) {
@@ -741,18 +786,51 @@ public class CaseDataWorker {
     }
 
     private Set<String> getExistingColumns(String tableName) {
+        if (tableName == null) return java.util.Collections.emptySet();
+        String up = tableName.toUpperCase(java.util.Locale.ROOT);
+        // Check cache
+        Set<String> cached = cachedTableColumns.get(up);
+        if (cached != null) return cached;
+
+        Set<String> cols = new HashSet<>();
+        java.sql.Connection conn = null;
         try {
-            List<Map<String, Object>> rows = jdbc.queryForList("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ?", tableName.toUpperCase());
-            Set<String> cols = new HashSet<>();
+            conn = jdbc.getDataSource() == null ? null : jdbc.getDataSource().getConnection();
+            if (conn != null) {
+                java.sql.ResultSet rs = null;
+                try {
+                    // Use JDBC metadata which is more portable than querying INFORMATION_SCHEMA directly
+                    rs = conn.getMetaData().getColumns(null, null, up, null);
+                    while (rs.next()) {
+                        String col = rs.getString("COLUMN_NAME");
+                        if (col != null) cols.add(col.toUpperCase(java.util.Locale.ROOT));
+                    }
+                    if (!cols.isEmpty()) {
+                        cachedTableColumns.put(up, cols);
+                        return cols;
+                    }
+                } finally {
+                    if (rs != null) try { rs.close(); } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception ex) {
+            log.debug("getExistingColumns: metadata fallback failed for {}: {}", tableName, ex.getMessage());
+        } finally {
+            if (conn != null) try { conn.close(); } catch (Exception ignored) {}
+        }
+
+        // Second attempt: query INFORMATION_SCHEMA (some in-memory DBs require this)
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ?", up);
             for (Map<String, Object> r : rows) {
                 Object val = r.get("COLUMN_NAME");
-                if (val != null) cols.add(val.toString().toUpperCase());
+                if (val != null) cols.add(val.toString().toUpperCase(java.util.Locale.ROOT));
             }
-            return cols;
+            cachedTableColumns.put(up, cols);
         } catch (Exception ex) {
-            log.debug("getExistingColumns: fallback - could not query information schema for {}: {}", tableName, ex.getMessage());
-            return new HashSet<>();
+            log.debug("getExistingColumns: INFORMATION_SCHEMA query failed for {}: {}", tableName, ex.getMessage());
         }
+        return cols;
     }
 
     /**
@@ -811,7 +889,8 @@ public class CaseDataWorker {
                 createTableSql.append("case_instance_id VARCHAR(255) NOT NULL UNIQUE, ");
 
                 // Add standard work columns
-                createTableSql.append("plain_payload LONGTEXT, ");
+                String payloadType = isH2() ? "CLOB" : "LONGTEXT";
+                createTableSql.append("plain_payload ").append(payloadType).append(", ");
                 createTableSql.append("requested_by VARCHAR(255)");
 
                 // Add timestamp columns (avoid ON UPDATE for H2 compatibility)
@@ -896,6 +975,23 @@ public class CaseDataWorker {
      * @param hint optional SQL type hint (e.g., "DECIMAL(10,2)", "VARCHAR(100)", "BIGINT"); if provided, takes precedence over value type
      * @return a SQL type string suitable for CREATE TABLE or ALTER TABLE ADD COLUMN
      */
+     private boolean isH2() {
+         if (cachedIsH2 != null) return cachedIsH2;
+         try {
+             String db = jdbc.getDataSource() == null ? null : jdbc.getDataSource().getConnection().getMetaData().getDatabaseProductName();
+             if (db != null && db.toLowerCase(java.util.Locale.ROOT).contains("h2")) {
+                 cachedIsH2 = true;
+                 return true;
+             }
+         } catch (Exception ignored) {
+             // Avoid repeatedly grabbing connections if the pool is under pressure; assume H2 by default in failure cases
+             cachedIsH2 = true;
+             return true;
+         }
+         cachedIsH2 = false;
+         return false;
+     }
+  
      private String determineColumnType(Object value, String hint) {
         // If mapping provides a hint, honor common types
         if (hint != null) {
@@ -905,44 +1001,44 @@ public class CaseDataWorker {
                 case "decimal": case "number": return "DECIMAL(19,4)";
                 case "boolean": return "BOOLEAN";
                 case "timestamp": case "datetime": case "date": return "TIMESTAMP";
-                case "text": return "LONGTEXT";
+                case "text": return isH2() ? "CLOB" : "LONGTEXT";
                 case "string": default:
                     // if explicit VARCHAR size provided (e.g., VARCHAR(100)) return as-is
                     if (h.startsWith("varchar") || h.startsWith("char") || h.startsWith("decimal")) return hint;
                     return "VARCHAR(255)";
             }
         }
-
+ 
         if (value == null) {
-            return "LONGTEXT";
+            return isH2() ? "CLOB" : "LONGTEXT";
         }
-
+ 
         if (value instanceof Integer || value instanceof Long) {
             return "BIGINT";
         }
-
+ 
         if (value instanceof Double || value instanceof Float) {
             return "DECIMAL(19,4)";
         }
-
+ 
         if (value instanceof Boolean) {
             return "BOOLEAN";
         }
-
+ 
         if (value instanceof java.time.temporal.Temporal ||
             value instanceof java.util.Date) {
             return "TIMESTAMP";
         }
-
+ 
         if (value instanceof String str) {
             if (str.length() > 255) {
-                return "LONGTEXT";
+                return isH2() ? "CLOB" : "LONGTEXT";
             }
             return "VARCHAR(255)";
         }
-
+ 
         // Default for complex types (JSON, arrays, objects)
-        return "LONGTEXT";
+        return isH2() ? "CLOB" : "LONGTEXT";
     }
 
     /**
@@ -975,18 +1071,19 @@ public class CaseDataWorker {
         String columns = String.join(", ", columnOrder);
         String values = String.join(", ", placeholders);
 
-        // Build UPDATE clause for duplicate key updates (exclude case_instance_id from updates since it's the key)
-        StringBuilder updateClause = new StringBuilder();
-        int paramIndex = 0;
+        // Identify key column and build update assignments
+        String keyCol = null;
+        StringBuilder updateAssignments = new StringBuilder();
         for (String col : columnOrder) {
-            if (!col.equalsIgnoreCase("case_instance_id")) {
-                if (updateClause.length() > 0) updateClause.append(", ");
-                updateClause.append(col).append("=VALUES(").append(col).append(")");
+            if (col.equalsIgnoreCase("case_instance_id")) {
+                keyCol = col;
+                continue;
             }
+            if (updateAssignments.length() > 0) updateAssignments.append(", ");
+            updateAssignments.append(col).append("=src.").append(col);
         }
 
-        // Require case_instance_id for proper upsert semantics
-        if (!columnOrder.stream().anyMatch(c -> c.equalsIgnoreCase("case_instance_id"))) {
+        if (keyCol == null) {
             log.warn("buildUpsertSql: case_instance_id not in columnOrder; falling back to INSERT (will cause duplicates on retry)");
             return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
         }
@@ -994,23 +1091,110 @@ public class CaseDataWorker {
         try {
             String db = "";
             try { db = jdbc.getDataSource() == null ? "" : jdbc.getDataSource().getConnection().getMetaData().getDatabaseProductName(); } catch (Exception ignored) {}
-            if (db != null) {
-                String dbLower = db.toLowerCase(java.util.Locale.ROOT);
-                if (dbLower.contains("h2")) {
-                    // H2 supports MERGE ... KEY syntax for upsert (native ANSI SQL)
-                    return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
-                } else if (dbLower.contains("mysql") || dbLower.contains("mariadb")) {
-                    // MySQL/MariaDB: INSERT ... ON DUPLICATE KEY UPDATE
-                    if (updateClause.length() > 0) {
-                        return String.format("INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s", tableName, columns, values, updateClause);
+            String dbLower = db == null ? "" : db.toLowerCase(java.util.Locale.ROOT);
+
+            // For H2 and other ANSI-supporting DBs prefer ANSI MERGE USING VALUES
+            if (dbLower.contains("h2")) {
+                // Use H2's simpler MERGE ... KEY(...) VALUES(...) syntax which is reliable across H2 2.x
+                return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+            } else if (dbLower.contains("postgres") || dbLower.contains("oracle") || dbLower.contains("sqlserver")) {
+                StringBuilder srcCols = new StringBuilder();
+                for (int i = 0; i < columnOrder.size(); i++) {
+                    if (i > 0) srcCols.append(", ");
+                    srcCols.append(columnOrder.get(i));
+                }
+                StringBuilder insertCols = new StringBuilder();
+                StringBuilder insertVals = new StringBuilder();
+                for (int i = 0; i < columnOrder.size(); i++) {
+                    if (i > 0) { insertCols.append(", "); insertVals.append(", "); }
+                    insertCols.append(columnOrder.get(i));
+                    insertVals.append("src.").append(columnOrder.get(i));
+                }
+                String updateClause = updateAssignments.length() == 0 ? null : updateAssignments.toString();
+                StringBuilder merge = new StringBuilder();
+                merge.append("MERGE INTO ").append(tableName).append(" AS t USING (VALUES (").append(values).append(")) AS src(").append(srcCols.toString()).append(") ON t.").append(keyCol).append(" = src.").append(keyCol).append(" ");
+                if (updateClause != null) {
+                    merge.append("WHEN MATCHED THEN UPDATE SET ").append(updateClause).append(" ");
+                }
+                merge.append("WHEN NOT MATCHED THEN INSERT (").append(insertCols.toString()).append(") VALUES (").append(insertVals.toString()).append(")");
+                return merge.toString();
+            } else if (dbLower.contains("mysql") || dbLower.contains("mariadb")) {
+                // MySQL/MariaDB: INSERT ... ON DUPLICATE KEY UPDATE
+                if (updateAssignments.length() > 0) {
+                    StringBuilder updateClauseMysql = new StringBuilder();
+                    for (String col : columnOrder) {
+                        if (col.equalsIgnoreCase("case_instance_id")) continue;
+                        if (updateClauseMysql.length() > 0) updateClauseMysql.append(", ");
+                        updateClauseMysql.append(col).append("=VALUES(").append(col).append(")");
                     }
+                    return String.format("INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s", tableName, columns, values, updateClauseMysql.toString());
                 }
             }
-            // Default to H2 MERGE syntax for other databases
-            return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+
+            // Fallback to INSERT (no upsert semantics)
+            return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
         } catch (Exception ignored) {
-            log.warn("buildUpsertSql: failed to detect database, defaulting to MERGE syntax");
-            return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+            log.warn("buildUpsertSql: failed to detect database, defaulting to INSERT");
+            return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
+        }
+    }
+
+    /**
+     * H2-specific robust fallback: perform a SELECT to check existence then UPDATE or INSERT atomically
+     * Relies on outer @Transactional in reindexByCaseInstanceId for transactional safety.
+     */
+    private void h2SelectUpdateInsert(String tableName, java.util.List<String> columnOrder, Map<String, Object> rowValues) {
+        if (tableName == null || tableName.trim().isEmpty() || columnOrder == null || columnOrder.isEmpty()) return;
+        try {
+            // If no case_instance_id present we cannot perform key-based upsert; attempt plain INSERT
+            Object keyVal = rowValues.get("case_instance_id");
+            String placeholders = String.join(", ", java.util.Collections.nCopies(columnOrder.size(), "?"));
+            String columns = String.join(", ", columnOrder);
+            Object[] insertParams = columnOrder.stream().map(rowValues::get).toArray();
+
+            if (keyVal == null) {
+                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
+                jdbc.update(insertSql, insertParams);
+                return;
+            }
+
+            // Check existence
+            Integer count = 0;
+            try {
+                count = jdbc.queryForObject(String.format("SELECT COUNT(1) FROM %s WHERE case_instance_id = ?", tableName), new Object[]{keyVal}, Integer.class);
+            } catch (Exception ex) {
+                // Some tables (index tables) may have different uniqueness semantics; fall back to insert
+                log.debug("h2SelectUpdateInsert: existence check failed for table {}: {}", tableName, ex.getMessage());
+                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
+                jdbc.update(insertSql, insertParams);
+                return;
+            }
+
+            if (count != null && count > 0) {
+                // Build UPDATE statement for non-key columns
+                StringBuilder set = new StringBuilder();
+                java.util.List<Object> params = new java.util.ArrayList<>();
+                for (String col : columnOrder) {
+                    if (col.equalsIgnoreCase("case_instance_id")) continue;
+                    if (set.length() > 0) set.append(", ");
+                    set.append(col).append(" = ?");
+                    params.add(rowValues.get(col));
+                }
+                // No non-key columns to update: nothing to do
+                if (params.isEmpty()) {
+                    log.debug("h2SelectUpdateInsert: nothing to update for table {} and key {}", tableName, keyVal);
+                    return;
+                }
+                params.add(keyVal);
+                String updateSql = String.format("UPDATE %s SET %s WHERE case_instance_id = ?", tableName, set.toString());
+                jdbc.update(updateSql, params.toArray());
+            } else {
+                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
+                jdbc.update(insertSql, insertParams);
+            }
+        } catch (Exception ex) {
+            log.error("h2SelectUpdateInsert: failed for table {}: {}", tableName, ex.getMessage(), ex);
+            throw new RuntimeException(ex);
         }
     }
 

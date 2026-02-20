@@ -16,6 +16,18 @@
       "nullable": false
     },
     {
+      "name": "priority",
+      "jsonPath": "$.priority",
+      "type": "string",
+      "nullable": true
+    },
+    {
+      "name": "requestedBy",
+      "jsonPath": "$.requestedBy",
+      "type": "string",
+      "nullable": true
+    },
+    {
       "name": "customer",
       "jsonPath": "$.customer",
       "type": "Customer"
@@ -45,6 +57,12 @@
       "name": "params",
       "jsonPath": "$.params",
       "type": "Params"
+    },
+    {
+      "name": "createTime",
+      "jsonPath": "$.createTime",
+      "type": "string",
+      "nullable": true
     }
   ]
 }

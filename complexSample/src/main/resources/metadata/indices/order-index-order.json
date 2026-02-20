@@ -31,7 +31,7 @@
       "nullable": true
     },
     {
-      "jsonPath": "$.createdAt",
+      "jsonPath": "$.createTime",
       "plainColumn": "created_at",
       "type": "TIMESTAMP",
       "nullable": true
