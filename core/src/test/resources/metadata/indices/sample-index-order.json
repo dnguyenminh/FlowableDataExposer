@@ -1,0 +1,15 @@
+{
+  "$schema": "/metadata/index-mapping-schema.json",
+  "class": "OrderIndex",
+  "workClassReference": "Order",
+  "description": "Sample index rule for Order plain fields",
+  "table": "order_index",
+  "jsonPath": "$",
+  "mappings": [
+    { "jsonPath": "$.total", "plainColumn": "total_amount", "type": "decimal", "nullable": true },
+    { "jsonPath": "$.shippingFee", "plainColumn": "shipping_fee", "type": "decimal", "nullable": true },
+    { "jsonPath": "$.businessKey", "plainColumn": "business_key", "type": "string", "nullable": true},
+    { "jsonPath": "$.orderDate", "plainColumn": "order_date", "type": "datetime", "nullable": true },
+    { "jsonPath": "$.id", "plainColumn": "id", "type": "string", "nullable": true }
+  ]
+}

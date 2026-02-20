@@ -34,11 +34,19 @@ public class MetadataResolver {
 
     /** Loader for file-backed canonical metadata definitions */
     private final MetadataResourceLoader resourceLoader;
+    @Autowired
+    private vn.com.fecredit.flowable.exposer.service.IndexLoader indexLoader;
 
     @Autowired
+    // Backwards-compatible constructors: keep two-arg constructor used by tests and add three-arg for DI
     public MetadataResolver(SysExposeClassDefRepository repo, MetadataResourceLoader resourceLoader) {
+        this(repo, resourceLoader, null);
+    }
+
+    public MetadataResolver(SysExposeClassDefRepository repo, MetadataResourceLoader resourceLoader, vn.com.fecredit.flowable.exposer.service.IndexLoader indexLoader) {
         this.repo = repo;
         this.resourceLoader = resourceLoader;
+        this.indexLoader = indexLoader;
         this.resolvedCache = Caffeine.newBuilder()
                 .maximumSize(1024)
                 .expireAfterWrite(Duration.ofMinutes(10))
@@ -244,6 +252,24 @@ public class MetadataResolver {
     public void evict(String classOrEntityType) { resolvedCache.invalidate(classOrEntityType); }
 
     public void evictAll() { resolvedCache.invalidateAll(); }
+
+    /**
+     * Returns an index definition (if any) loaded from metadata/indices for the given class/entity.
+     */
+    public java.util.Optional<vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition> indexFor(String classOrEntityType) {
+        try {
+            if (indexLoader == null || classOrEntityType == null) return java.util.Optional.empty();
+            return indexLoader.findByClass(classOrEntityType);
+        } catch (Exception ex) {
+            log.debug("indexFor lookup failed for {}: {}", classOrEntityType, ex.getMessage());
+            return java.util.Optional.empty();
+        }
+    }
+
+    public java.util.Collection<vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition> allIndices() {
+        if (indexLoader == null) return java.util.List.of();
+        return indexLoader.all();
+    }
 
     public MetadataDefinition resolveForClass(String classOrEntityType) {
         try {

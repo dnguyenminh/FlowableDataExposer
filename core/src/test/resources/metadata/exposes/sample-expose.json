@@ -10,8 +10,7 @@
     {
       "jsonPath": "$.total",
       "type": "number",
-      "plainColumn": "total_amount",
-      "exportDest": ["report", "search"]
+      "plainColumn": "total_amount"
     },
     {
       "jsonPath": "$.items[0].id",

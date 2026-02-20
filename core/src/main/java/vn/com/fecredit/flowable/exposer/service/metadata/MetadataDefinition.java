@@ -74,6 +74,7 @@ public class MetadataDefinition {
     }
 
     // Field-level defs for annotator
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class FieldDef {
         public String name; // field name in JSON/vars
         // primary class hint: allow both explicit "className" and legacy "type" in JSON files

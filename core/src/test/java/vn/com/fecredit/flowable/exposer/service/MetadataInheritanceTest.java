@@ -1,7 +1,6 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
 import static org.assertj.core.api.Assertions.assertThat;

@@ -1,10 +1,8 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import vn.com.fecredit.flowable.exposer.job.CaseDataWorker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

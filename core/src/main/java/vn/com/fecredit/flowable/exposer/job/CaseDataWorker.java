@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 import org.springframework.transaction.annotation.Transactional;
 import vn.com.fecredit.flowable.exposer.entity.SysExposeRequest;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeRequestRepository;
@@ -27,6 +28,7 @@ import java.util.Set;
  * and rebuilding index/plain tables from the append-only case data store.
  */
 @Component
+@Profile("!test")
 public class CaseDataWorker {
 
     private static final Logger log = LoggerFactory.getLogger(CaseDataWorker.class);
@@ -41,6 +43,8 @@ public class CaseDataWorker {
     private MetadataResolver resolver;
     @Autowired
     private SysExposeRequestRepository reqRepo;
+    @Autowired
+    private vn.com.fecredit.flowable.exposer.service.IndexLoader indexLoader;
 
     @Scheduled(fixedDelay = 1000)
     public void pollAndProcess() {
@@ -106,6 +110,19 @@ public class CaseDataWorker {
             } catch (Exception ignored) {}
 
             upsertPlain(entityType, caseInstanceId, annotatedJson, rowCreatedAt, effectiveMappings, legacyMappings, directFallbacks);
+
+            // New: process index mappings if any are defined for this work class
+            try {
+                indexLoader.findByClass(entityType).ifPresent(def -> {
+                    try {
+                        processIndexDefinition(def, caseInstanceId, annotatedJson);
+                    } catch (Exception e) {
+                        log.error("processIndexDefinition failed: {}", e.getMessage(), e);
+                    }
+                });
+            } catch (Exception ex) {
+                log.error("Error processing index mappings for {}: {}", caseInstanceId, ex.getMessage(), ex);
+            }
 
             log.info("reindexByCaseInstanceId - completed for {}", caseInstanceId);
 
@@ -297,6 +314,8 @@ public class CaseDataWorker {
                     if (extractedValue != null) {
                         rowValues.put(columnName, extractedValue);
                     }
+               
+               
                 } catch (Exception ex) {
                     log.debug("Failed to extract legacy value for column {} using jsonPath {}: {}", columnName, jsonPath, ex.getMessage());
                 }
@@ -326,6 +345,153 @@ public class CaseDataWorker {
         return rowValues;
     }
 
+    // ---------- Index processing helpers ----------
+    /**
+     * Processes index definitions for a case by extracting data via JsonPath and upserting to index tables.
+     *
+     * <p>Algorithm:
+     * <ol>
+     *   <li>Read the index's root JsonPath (default "$" for the entire object)</li>
+     *   <li>Extract the data at that path from the annotated case JSON</li>
+     *   <li>Based on extracted data type:
+     *       <ul>
+     *         <li><strong>List</strong>: emit one index row per array element (array expansion)</li>
+     *         <li><strong>Map</strong>: emit one index row per key-value entry (map expansion) — entries wrapped as {_key, _value}</li>
+     *         <li><strong>Single Object</strong>: emit one index row</li>
+     *       </ul>
+     *   </li>
+     *   <li>For each row, call {@link #buildIndexRow(IndexDefinition, String, String)} to map individual fields via IndexField definitions</li>
+     *   <li>Batch-upsert all rows to the index table via {@link #upsertRowsByMetadata(String, List, IndexDefinition)}</li>
+     * </ol>
+     *
+     * <p>Index Mapping Type:
+     * <ul>
+     *   <li>IndexDefinition contains the target table name (e.g., "item_index"), root JsonPath, and a list of IndexField mappings</li>
+     *   <li>Each IndexField specifies: jsonPath (location in item JSON), plainColumn (output column name), and type (SQL type hint)</li>
+     *   <li>Type hints (e.g., "DECIMAL(10,2)", "BIGINT") are passed to {@link #determineColumnType(Object, String)} for column creation</li>
+     * </ul>
+     *
+     * <p>Array Expansion Example:
+     * <pre>
+     * IndexDefinition: table="item_index", jsonPath="$.items", mappings=[IndexField(jsonPath="$.id", plainColumn="item_id", type="VARCHAR(50)")]
+     * Input JSON: { "caseInstanceId": "C1", "items": [ { "id": "1", "sku": "A" }, { "id": "2", "sku": "B" } ] }
+     * Result: Two rows inserted into item_index table
+     *   Row 1: case_instance_id="C1", item_id="1", plain_payload={"id":"1","sku":"A"}
+     *   Row 2: case_instance_id="C1", item_id="2", plain_payload={"id":"2","sku":"B"}
+     * </pre>
+     *
+     * <p>Map Expansion Example:
+     * <pre>
+     * IndexDefinition: table="attr_index", jsonPath="$.attributes", mappings=[IndexField(jsonPath="$._key", plainColumn="attr_name", type="VARCHAR(100)"), IndexField(jsonPath="$._value", plainColumn="attr_value", type="LONGTEXT")]
+     * Input JSON: { "caseInstanceId": "C1", "attributes": { "color": "blue", "size": "XL" } }
+     * Result: Two rows inserted into attr_index table (one per map entry)
+     *   Row 1: case_instance_id="C1", attr_name="color", attr_value="blue", plain_payload={"_key":"color","_value":"blue"}
+     *   Row 2: case_instance_id="C1", attr_name="size", attr_value="XL", plain_payload={"_key":"size","_value":"XL"}
+     * </pre>
+     *
+     * <p>Error Handling: Failures are logged at ERROR level but do not propagate, allowing the listener to continue processing.
+     *
+     * @param def the {@link vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition} containing:
+     *            - table: target index table name (e.g., "item_index", "attr_index")
+     *            - jsonPath: root extraction path (default "$"); can extract List, Map, or single Object
+     *            - mappings: list of IndexField definitions for column extraction; for maps use $_key and $_value access patterns
+     * @param caseInstanceId the case instance ID to include in all index rows (for cross-referencing)
+     * @param annotatedJson the full case payload JSON (decrypted blob + metadata annotations)
+     */
+    private void processIndexDefinition(vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition def, String caseInstanceId, String annotatedJson) {
+         if (def == null || def.mappings == null || def.mappings.isEmpty()) return;
+         try {
+             String rootPath = def.jsonPath == null || def.jsonPath.isBlank() ? "$" : def.jsonPath;
+             Object extracted = JsonPath.read(annotatedJson, rootPath);
+             List<Map<String, Object>> rows = new java.util.ArrayList<>();
+             if (extracted instanceof java.util.List) {
+                 // List expansion: emit one row per array element
+                 List<?> items = (List<?>) extracted;
+                 for (Object item : items) {
+                     String jsonForItem = toJsonSafe(item);
+                     Map<String, Object> row = buildIndexRow(def, caseInstanceId, jsonForItem);
+                     rows.add(row);
+                 }
+             } else if (extracted instanceof java.util.Map) {
+                 // Map expansion: emit one row per map entry (key-value pair)
+                 Map<?, ?> mapEntries = (Map<?, ?>) extracted;
+                 for (Map.Entry<?, ?> entry : mapEntries.entrySet()) {
+                     // Create an object containing the key and value for extraction
+                     java.util.Map<String, Object> entryMap = new java.util.HashMap<>();
+                     entryMap.put("_key", entry.getKey());
+                     entryMap.put("_value", entry.getValue());
+                     String jsonForItem = toJsonSafe(entryMap);
+                     Map<String, Object> row = buildIndexRow(def, caseInstanceId, jsonForItem);
+                     rows.add(row);
+                     log.debug("processIndexDefinition: expanded map entry key={} for table {}", entry.getKey(), def.table);
+                 }
+             } else {
+                 // Single object: emit one row
+                 String jsonForItem = toJsonSafe(extracted);
+                 Map<String, Object> row = buildIndexRow(def, caseInstanceId, jsonForItem);
+                 rows.add(row);
+             }
+             if (!rows.isEmpty()) upsertRowsByMetadata(def.table, rows, def);
+         } catch (Exception ex) {
+             log.error("processIndexDefinition failed for case {} table {}: {}", caseInstanceId, def.table, ex.getMessage(), ex);
+         }
+     }
+
+    private String toJsonSafe(Object obj) {
+        try { return om.writeValueAsString(obj); } catch (Exception e) { return obj == null ? "null" : obj.toString(); }
+    }
+
+    /**
+     * Builds a single index row by extracting field values from a JSON object according to field mappings.
+     *
+     * <p>For each {@link IndexDefinition.IndexField} in the index definition:
+     * <ol>
+     *   <li>Apply the field's JsonPath expression to the item JSON</li>
+     *   <li>If the extracted value is a complex type (Map, List, etc.), serialize it to JSON string</li>
+     *   <li>Use the field's {@code plainColumn} name if specified, otherwise derive from JsonPath</li>
+     *   <li>Add the column-value pair to the result map</li>
+     * </ol>
+     *
+     * <p>Every row includes:
+     * <ul>
+     *   <li>{@code case_instance_id}: The parent case ID for cross-referencing</li>
+     *   <li>{@code plain_payload}: The full JSON representation of this item (for audit/debugging)</li>
+     *   <li>All mapped fields as extracted via JsonPath</li>
+     * </ul>
+     *
+     * <p>Example:
+     * <pre>
+     * IndexField: jsonPath="$.price" plainColumn="item_price"
+     * Item JSON: { "name": "Widget", "price": 99.99 }
+     * Result: { "case_instance_id": "C1", "plain_payload": {...}, "item_price": 99.99 }
+     * </pre>
+     *
+     * <p>Failures to extract individual fields are logged but do not halt row building.
+     *
+     * @param def the IndexDefinition containing field mappings
+     * @param caseInstanceId the case instance ID to include in the row
+     * @param jsonForItem the JSON string representation of a single item (may be a list element or the root object)
+     * @return a Map of column names to values ready for upsert
+     */
+    private Map<String, Object> buildIndexRow(vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition def, String caseInstanceId, String jsonForItem) {
+        Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("case_instance_id", caseInstanceId);
+        row.put("plain_payload", jsonForItem);
+        for (vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition.IndexField f : def.mappings) {
+            try {
+                Object val = JsonPath.read(jsonForItem, f.jsonPath);
+                if (val != null && !(val instanceof String) && !(val instanceof Number) && !(val instanceof Boolean) && !(val instanceof java.util.Date) && !(val instanceof java.time.temporal.Temporal)) {
+                    try { val = om.writeValueAsString(val); } catch (Exception ex) { val = val.toString(); }
+                }
+                String col = f.plainColumn != null && !f.plainColumn.isBlank() ? f.plainColumn : f.jsonPath.replaceAll("[^a-zA-Z0-9_]", "_");
+                row.put(col, val);
+            } catch (Exception ex) {
+                log.debug("Failed to extract index field {} for table {}: {}", f.jsonPath, def.table, ex.getMessage());
+            }
+        }
+        return row;
+    }
+
     /**
      * Dynamically inserts or updates a row in the specified table.
      * If the table does not exist, creates it with a default schema based on rowValues.
@@ -352,14 +518,15 @@ public class CaseDataWorker {
             }
 
             // Ensure all columns referenced in rowValues exist before attempting insert
-            ensureColumnsPresent(tableName, rowValues);
+            ensureColumnsPresent(tableName, rowValues, null);
 
-            // Build dynamic upsert SQL
-            String upsertSql = buildUpsertSql(tableName, rowValues);
-            log.debug("upsertRowByMetadata: executing SQL for table {} with {} columns", tableName, rowValues.size());
+            // Build deterministic column order and dynamic upsert SQL
+            java.util.List<String> colOrder = upsertColumnOrder(rowValues);
+            String upsertSql = buildUpsertSql(tableName, colOrder);
+            log.debug("upsertRowByMetadata: executing SQL for table {} with {} columns", tableName, colOrder.size());
 
-            // Execute the upsert with parameterized values
-            Object[] paramValues = rowValues.values().toArray();
+            // Execute the upsert with parameterized values (align params with column order)
+            Object[] paramValues = colOrder.stream().map(rowValues::get).toArray();
             try {
                 jdbc.update(upsertSql, paramValues);
             } catch (org.springframework.jdbc.BadSqlGrammarException badSql) {
@@ -371,7 +538,7 @@ public class CaseDataWorker {
                     log.warn("upsertRowByMetadata: detected missing column {} on table {} — attempting ALTER TABLE to add it", missingCol, tableName);
                     try {
                         Object sample = rowValues.get(missingCol);
-                        String colType = determineColumnType(sample);
+                        String colType = determineColumnType(sample, null);
                         String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, missingCol, colType);
                         jdbc.execute(alter);
                         // retry once
@@ -393,37 +560,161 @@ public class CaseDataWorker {
     }
 
     /**
+     * Batch-upserts multiple rows into an index table with type hints from the index definition.
+     *
+     * <p>For each row in the batch:
+     * <ol>
+     *   <li>Extract type hints from {@link vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition.IndexField} definitions (e.g., "BIGINT", "VARCHAR(100)")</li>
+     *   <li>Call {@link #ensureColumnsPresent(String, Map, Map)} to verify/create all columns with appropriate types</li>
+     *   <li>Build deterministic column ordering via {@link #upsertColumnOrder(Map)}</li>
+     *   <li>Execute parameterized INSERT/MERGE via {@link #buildUpsertSql(String, Map)}</li>
+     *   <li>On column-not-found errors (detected via regex), dynamically ALTER TABLE to add the missing column</li>
+     *   <li>Retry the upsert once after successful ALTER</li>
+     * </ol>
+     *
+     * <p>Type Hints Example:
+     * <pre>
+     * IndexField: plainColumn="item_price" type="DECIMAL(10,2)"
+     * Result: Column created as DECIMAL(10,2), not inferred from value type
+     * </pre>
+     *
+     * <p>Error Isolation: BadSqlGrammarException and other errors are caught and logged per row;
+     * processing continues for remaining rows.
+     *
+     * @param tableName the target index table name (must be valid SQL identifier)
+     * @param rows the batch of row maps to upsert (each map = column name to value)
+     * @param def the IndexDefinition containing type hints for field mappings; may be null
+     */
+    private void upsertRowsByMetadata(String tableName, java.util.List<Map<String, Object>> rows, vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition def) {
+        if (rows == null || rows.isEmpty()) return;
+        try {
+            // Build type hints from IndexDefinition mappings
+            Map<String, String> hints = new java.util.HashMap<>();
+            if (def != null && def.mappings != null) {
+                for (vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition.IndexField f : def.mappings) {
+                    String col = f.plainColumn != null && !f.plainColumn.isBlank() ? f.plainColumn : f.jsonPath.replaceAll("[^a-zA-Z0-9_]", "_");
+                    if (f.type != null && !f.type.isBlank()) hints.put(col, f.type);
+                }
+            }
+
+            for (Map<String, Object> row : rows) {
+                ensureColumnsPresent(tableName, row, hints);
+            }
+
+            // Simple batch execution: execute upsert per row in a loop (DB-specific batching can be optimized later)
+            for (Map<String, Object> row : rows) {
+                // Build deterministic column order and parameter list for this row
+                java.util.List<String> columnOrder = upsertColumnOrder(row);
+                java.util.List<Object> paramsList = new java.util.ArrayList<>();
+                for (String col : columnOrder) paramsList.add(row.get(col));
+                if (paramsList.isEmpty()) continue;
+                String upsertSql = buildUpsertSql(tableName, row);
+                Object[] params = paramsList.toArray();
+                try {
+                    jdbc.update(upsertSql, params);
+                } catch (org.springframework.jdbc.BadSqlGrammarException badSql) {
+                    String msg = badSql.getMessage();
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("Column \"([^\"]+)\" not found").matcher(msg);
+                    if (m.find()) {
+                        String missingCol = m.group(1);
+                        // Attempt to find case-insensitive key in row map
+                        String matchedKey = null;
+                        for (String k : row.keySet()) {
+                            if (k.equalsIgnoreCase(missingCol)) { matchedKey = k; break; }
+                        }
+                        Object sample = matchedKey == null ? null : row.get(matchedKey);
+                        String hint = matchedKey == null ? null : hints.get(matchedKey);
+                        String colType = determineColumnType(sample, hint);
+                        try {
+                            jdbc.execute(String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, (matchedKey == null ? missingCol : matchedKey), colType));
+                            jdbc.update(upsertSql, params);
+                        } catch (Exception ex2) {
+                            log.error("upsertRowsByMetadata: failed to add missing column {}: {}", missingCol, ex2.getMessage(), ex2);
+                        }
+                    } else {
+                        log.error("upsertRowsByMetadata: bad SQL grammar: {}", badSql.getMessage());
+                    }
+                }
+            }
+            log.info("upsertRowsByMetadata: upserted {} rows into {}", rows.size(), tableName);
+        } catch (Exception ex) {
+            log.error("upsertRowsByMetadata: failed for table {}: {}", tableName, ex.getMessage(), ex);
+        }
+    }
+
+    /**
      * Checks if a table exists in the database.
      * Handles database-specific metadata queries gracefully.
      */
     private boolean tableExists(String tableName) {
         try {
-            Integer count = jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_NAME = ? AND TABLE_SCHEMA = DATABASE()",
-                    Integer.class,
-                    tableName
-            );
-            boolean exists = count != null && count > 0;
-            log.debug("tableExists: table {} exists = {}", tableName, exists);
-            return exists;
-        } catch (Exception ex) {
-            // If information_schema is not available, try alternate approach
-            log.debug("tableExists: checking table {} with fallback method: {}", tableName, ex.getMessage());
+            // Use JDBC metadata lookup (lighter and avoids relying on INFORMATION_SCHEMA/DATABASE())
+            java.sql.Connection conn = null;
             try {
-                jdbc.queryForObject("SELECT 1 FROM " + tableName + " LIMIT 1", Integer.class);
-                log.debug("tableExists: table {} exists (via fallback)", tableName);
-                return true;
-            } catch (Exception ex2) {
-                log.debug("tableExists: table {} does not exist", tableName);
-                return false;
+                conn = jdbc.getDataSource() == null ? null : jdbc.getDataSource().getConnection();
+                if (conn != null) {
+                    String tableUpper = tableName == null ? null : tableName.toUpperCase(java.util.Locale.ROOT);
+                    try (java.sql.ResultSet rs = conn.getMetaData().getTables(null, null, tableUpper, new String[]{"TABLE"})) {
+                        boolean exists = rs.next();
+                        log.debug("tableExists (meta): table {} exists = {}", tableName, exists);
+                        return exists;
+                    }
+                }
+            } finally {
+                if (conn != null) try { conn.close(); } catch (Exception ignored) {}
             }
+        } catch (Exception ex) {
+            log.debug("tableExists: metadata lookup failed for {}: {}", tableName, ex.getMessage());
+        }
+        // Fallback: lightweight query that will fail fast if table missing
+        try {
+            jdbc.queryForObject("SELECT 1 FROM " + tableName + " LIMIT 1", Integer.class);
+            log.debug("tableExists: table {} exists (via fallback)", tableName);
+            return true;
+        } catch (Exception ex2) {
+            log.debug("tableExists: table {} does not exist (fallback)", tableName);
+            return false;
         }
     }
 
     /**
-     * Ensure all columns referenced in rowValues exist on the table; add them if missing.
+     * Ensures all columns referenced in rowValues exist on the table; adds them if missing.
+     * Delegates to {@link #ensureColumnsPresent(String, Map, Map)} with no type hints.
+     *
+     * @param tableName the target table name
+     * @param rowValues the row map containing column names to check/create
      */
     private void ensureColumnsPresent(String tableName, Map<String, Object> rowValues) {
+         ensureColumnsPresent(tableName, rowValues, null);
+     }
+
+    /**
+     * Ensures all columns referenced in rowValues exist on the table; dynamically adds missing ones.
+     *
+     * <p>Algorithm:
+     * <ol>
+     *   <li>Query INFORMATION_SCHEMA.COLUMNS to get existing column names (case-insensitive via toUpperCase)</li>
+     *   <li>For each column in rowValues not in the existing set:
+     *       <ol>
+     *         <li>Skip reserved columns: {@code case_instance_id}, {@code id}</li>
+     *         <li>Validate identifier safety via {@link #isValidIdentifier(String)}</li>
+     *         <li>Determine SQL type via {@link #determineColumnType(Object, String)} using optional type hint</li>
+     *         <li>Execute {@code ALTER TABLE ADD COLUMN}</li>
+     *         <li>Add column to the existing set for subsequent checks</li>
+     *       </ol>
+     *   </li>
+     * </ol>
+     *
+     * <p>Type Hints: If a hint is provided for a column, it takes precedence over type inference from values.
+     * Example: hint "DECIMAL(10,2)" for a column "price" will create DECIMAL(10,2) instead of inferring from the numeric value.
+     *
+     * <p>Error Isolation: Failures to add individual columns are logged but do not halt processing.
+     *
+     * @param tableName the target table name
+     * @param rowValues the row map containing column names to check/create
+     * @param columnTypeHints optional map of column name to SQL type hint (e.g. "DECIMAL(10,2)", "BIGINT")
+     */
+     private void ensureColumnsPresent(String tableName, Map<String, Object> rowValues, Map<String, String> columnTypeHints) {
         try {
             Set<String> existing = getExistingColumns(tableName);
             for (String col : rowValues.keySet()) {
@@ -433,7 +724,8 @@ public class CaseDataWorker {
                     log.warn("ensureColumnsPresent: skipping invalid identifier {}", col);
                     continue;
                 }
-                String colType = determineColumnType(rowValues.get(col));
+                String hint = columnTypeHints == null ? null : columnTypeHints.get(col);
+                String colType = determineColumnType(rowValues.get(col), hint);
                 String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, col, colType);
                 try {
                     jdbc.execute(alter);
@@ -465,12 +757,34 @@ public class CaseDataWorker {
 
     /**
      * Creates a default work table with standard columns and indexes.
-     * Schema:
-     * - id (BIGINT AUTO_INCREMENT PRIMARY KEY)
-     * - case_instance_id (VARCHAR(255) UNIQUE NOT NULL)
-     * - Dynamic columns from rowValues (LONGTEXT or appropriate type)
-     * - created_at (TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
-     * - updated_at (TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)
+     *
+     * <p>Schema:
+     * <ul>
+     *   <li>{@code id} (VARCHAR(255) PRIMARY KEY) - string primary key to support caller-supplied identifiers</li>
+     *   <li>{@code case_instance_id} (VARCHAR(255) UNIQUE NOT NULL) - foreign key to the source case</li>
+     *   <li>{@code plain_payload} (LONGTEXT) - full JSON representation of the row for audit/debugging</li>
+     *   <li>{@code requested_by} (VARCHAR(255)) - audit field</li>
+     *   <li>Dynamic columns from rowValues - created via {@link #ensureColumnsPresent(String, Map, Map)}</li>
+     *   <li>{@code created_at} (TIMESTAMP DEFAULT CURRENT_TIMESTAMP) - creation timestamp</li>
+     *   <li>{@code updated_at} (TIMESTAMP DEFAULT CURRENT_TIMESTAMP) - last update timestamp</li>
+     * </ul>
+     *
+     * <p>Concurrency Safety:
+     * <ul>
+     *   <li>Uses {@code synchronized(tableName.intern())} to prevent concurrent CREATE TABLE storms</li>
+     *   <li>Checks {@link #tableExists(String)} early and returns if table already created by another thread</li>
+     *   <li>Catches and logs {@code BadSqlGrammarException} to handle benign race conditions</li>
+     * </ul>
+     *
+     * <p>Index Creation:
+     * <ul>
+     *   <li>Creates indexes on {@code case_instance_id} and {@code created_at} for query performance</li>
+     *   <li>Uses {@code IF NOT EXISTS} syntax for cross-DB compatibility; falls back to plain CREATE INDEX on error</li>
+     * </ul>
+     *
+     * @param tableName the name of the table to create (must be valid SQL identifier)
+     * @param rowValues the initial row values; used to infer dynamic column types via {@link #determineColumnType(Object, String)}
+     * @throws RuntimeException if table creation fails after retries
      */
     private void createDefaultWorkTable(String tableName, Map<String, Object> rowValues) {
         try {
@@ -480,46 +794,62 @@ public class CaseDataWorker {
                 return;
             }
 
-            // Build CREATE TABLE statement
-            StringBuilder createTableSql = new StringBuilder();
-            createTableSql.append("CREATE TABLE IF NOT EXISTS ").append(tableName).append(" (");
-            createTableSql.append("id BIGINT AUTO_INCREMENT PRIMARY KEY, ");
-            createTableSql.append("case_instance_id VARCHAR(255) NOT NULL UNIQUE, ");
+            // Prevent concurrent table creation for the same table which can exhaust connections
+            synchronized (tableName.intern()) {
+                if (tableExists(tableName)) {
+                    log.debug("createDefaultWorkTable: table {} already exists (created by concurrent thread)", tableName);
+                    return;
+                }
 
-            // Add standard work columns
-            createTableSql.append("plain_payload LONGTEXT, ");
-            createTableSql.append("requested_by VARCHAR(255)");
+                // Use a string primary key for id to accept caller-provided identifiers (safer for mixed test scenarios)
+                String idColumnDef = "id VARCHAR(255) PRIMARY KEY";
 
-            // Add timestamp columns (avoid ON UPDATE for H2 compatibility)
-            createTableSql.append(", created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
-            createTableSql.append(", updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                // Build CREATE TABLE statement
+                StringBuilder createTableSql = new StringBuilder();
+                createTableSql.append("CREATE TABLE ").append(tableName).append(" (");
+                createTableSql.append(idColumnDef).append(", ");
+                createTableSql.append("case_instance_id VARCHAR(255) NOT NULL UNIQUE, ");
 
-            // Finish CREATE TABLE (indexes created separately for better cross-DB compatibility)
-            createTableSql.append(")");
+                // Add standard work columns
+                createTableSql.append("plain_payload LONGTEXT, ");
+                createTableSql.append("requested_by VARCHAR(255)");
 
-            log.debug("createDefaultWorkTable: executing CREATE TABLE SQL: {}", createTableSql);
-            jdbc.execute(createTableSql.toString());
+                // Add timestamp columns (avoid ON UPDATE for H2 compatibility)
+                createTableSql.append(", created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                createTableSql.append(", updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
 
-            // Now ensure any dynamic columns are added
-            ensureColumnsPresent(tableName, rowValues);
+                // Finish CREATE TABLE (indexes created separately for better cross-DB compatibility)
+                createTableSql.append(")");
 
-            // Create indexes separately to avoid dialect-specific CREATE TABLE index syntax
-            try {
-                String idx1 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_case_instance_id ON %s(case_instance_id)", tableName, tableName);
-                String idx2 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at)", tableName, tableName);
-                jdbc.execute(idx1);
-                jdbc.execute(idx2);
-            } catch (Exception exIdx) {
-                // Some DBs may not support IF NOT EXISTS for CREATE INDEX; fall back to plain CREATE INDEX
+                log.debug("createDefaultWorkTable: executing CREATE TABLE SQL: {}", createTableSql);
                 try {
-                    jdbc.execute(String.format("CREATE INDEX idx_%s_case_instance_id ON %s(case_instance_id)", tableName, tableName));
-                } catch (Exception ignored) {}
+                    jdbc.execute(createTableSql.toString());
+                } catch (org.springframework.jdbc.BadSqlGrammarException e) {
+                    // Table may have been created concurrently by another thread/process; treat as benign.
+                    log.debug("createDefaultWorkTable: CREATE TABLE failed (table may already exist) - ignoring: {}", e.getMessage());
+                }
+
+                // Now ensure any dynamic columns are added
+                ensureColumnsPresent(tableName, rowValues);
+
+                // Create indexes separately to avoid dialect-specific CREATE TABLE index syntax
                 try {
-                    jdbc.execute(String.format("CREATE INDEX idx_%s_created_at ON %s(created_at)", tableName, tableName));
-                } catch (Exception ignored) {}
+                    String idx1 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_case_instance_id ON %s(case_instance_id)", tableName, tableName);
+                    String idx2 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at)", tableName, tableName);
+                    jdbc.execute(idx1);
+                    jdbc.execute(idx2);
+                } catch (Exception exIdx) {
+                    // Some DBs may not support IF NOT EXISTS for CREATE INDEX; fall back to plain CREATE INDEX
+                    try {
+                        jdbc.execute(String.format("CREATE INDEX idx_%s_case_instance_id ON %s(case_instance_id)", tableName, tableName));
+                    } catch (Exception ignored) {}
+                    try {
+                        jdbc.execute(String.format("CREATE INDEX idx_%s_created_at ON %s(created_at)", tableName, tableName));
+                    } catch (Exception ignored) {}
+                }
+
+                log.info("createDefaultWorkTable: successfully created table {} with default schema", tableName);
             }
-
-            log.info("createDefaultWorkTable: successfully created table {} with default schema", tableName);
         } catch (Exception ex) {
             log.error("createDefaultWorkTable: failed to create table {}: {}", tableName, ex.getMessage(), ex);
             throw new RuntimeException("Failed to create work table: " + tableName, ex);
@@ -528,8 +858,61 @@ public class CaseDataWorker {
 
     /**
      * Determines appropriate SQL column type based on the value type.
+     * Delegates to {@link #determineColumnType(Object, String)} with no type hint.
+     *
+     * @param value the sample value to infer type from
+     * @return a SQL type string (e.g., "VARCHAR(255)", "BIGINT", "DECIMAL(19,4)")
      */
     private String determineColumnType(Object value) {
+         return determineColumnType(value, null);
+     }
+
+    /**
+     * Determines appropriate SQL column type based on a type hint or value inference.
+     *
+     * <p>Type Hint Precedence (if hint is provided):
+     * <ul>
+     *   <li>"bigint", "long" → BIGINT</li>
+     *   <li>"decimal", "number" → DECIMAL(19,4)</li>
+     *   <li>"boolean" → BOOLEAN</li>
+     *   <li>"timestamp", "datetime", "date" → TIMESTAMP</li>
+     *   <li>"text" → LONGTEXT</li>
+     *   <li>"string" or any unrecognized hint → VARCHAR(255); if hint starts with "varchar", "char", or "decimal", return as-is</li>
+     * </ul>
+     *
+     * <p>Value-Based Inference (if no hint provided):
+     * <ul>
+     *   <li>null → LONGTEXT (safe default for unknown types)</li>
+     *   <li>Integer, Long → BIGINT</li>
+     *   <li>Double, Float → DECIMAL(19,4)</li>
+     *   <li>Boolean → BOOLEAN</li>
+     *   <li>java.time.temporal.Temporal, java.util.Date → TIMESTAMP</li>
+     *   <li>String (length ≤ 255) → VARCHAR(255)</li>
+     *   <li>String (length > 255) → LONGTEXT</li>
+     *   <li>Complex types (Map, List, etc.) → LONGTEXT (typically serialized to JSON)</li>
+     * </ul>
+     *
+     * @param value the sample value to infer type from; may be null
+     * @param hint optional SQL type hint (e.g., "DECIMAL(10,2)", "VARCHAR(100)", "BIGINT"); if provided, takes precedence over value type
+     * @return a SQL type string suitable for CREATE TABLE or ALTER TABLE ADD COLUMN
+     */
+     private String determineColumnType(Object value, String hint) {
+        // If mapping provides a hint, honor common types
+        if (hint != null) {
+            String h = hint.trim().toLowerCase(java.util.Locale.ROOT);
+            switch (h) {
+                case "bigint": case "long": return "BIGINT";
+                case "decimal": case "number": return "DECIMAL(19,4)";
+                case "boolean": return "BOOLEAN";
+                case "timestamp": case "datetime": case "date": return "TIMESTAMP";
+                case "text": return "LONGTEXT";
+                case "string": default:
+                    // if explicit VARCHAR size provided (e.g., VARCHAR(100)) return as-is
+                    if (h.startsWith("varchar") || h.startsWith("char") || h.startsWith("decimal")) return hint;
+                    return "VARCHAR(255)";
+            }
+        }
+
         if (value == null) {
             return "LONGTEXT";
         }
@@ -563,39 +946,123 @@ public class CaseDataWorker {
     }
 
     /**
-     * Builds a dynamic UPSERT SQL statement based on the provided table name and column values.
-     * Falls back to INSERT if MERGE is not supported by the database.
+     * Builds a dynamic UPSERT SQL statement based on the provided table name and column order.
+     *
+     * <p>Database Compatibility:
+     * <ul>
+     *   <li>For H2: Uses MERGE with ON DUPLICATE KEY UPDATE (H2 1.4.200+) or INSERT with UPDATE clause</li>
+     *   <li>For MySQL/MariaDB: Uses INSERT ... ON DUPLICATE KEY UPDATE</li>
+     *   <li>For PostgreSQL/others: Uses MERGE syntax</li>
+     *   <li>Fallback: Simple INSERT if UPSERT format unknown</li>
+     * </ul>
+     *
+     * <p>Upsert Semantics:
+     * <ul>
+     *   <li>CRITICAL: case_instance_id has UNIQUE constraint and must be the merge/conflict key</li>
+     *   <li>Updates all columns on conflict to ensure idempotency</li>
+     *   <li>Parameter placeholders (?) are generated in the same order as columnOrder</li>
+     * </ul>
+     *
+     * @param tableName the target table name
+     * @param columnOrder list of column names in the exact order of the parameter array to follow
+     * @return a parameterized SQL string with ? placeholders ready for {@link JdbcTemplate#update(String, Object[])}
+     * @throws IllegalArgumentException if columnOrder is null or empty
      */
-    private String buildUpsertSql(String tableName, Map<String, Object> rowValues) {
-        java.util.List<String> columnNames = new java.util.ArrayList<>(rowValues.keySet());
+    private String buildUpsertSql(String tableName, java.util.List<String> columnOrder) {
+        if (columnOrder == null || columnOrder.isEmpty()) throw new IllegalArgumentException("No columns to upsert");
         java.util.List<String> placeholders = new java.util.ArrayList<>();
-        for (int i = 0; i < columnNames.size(); i++) {
-            placeholders.add("?");
-        }
-
-        String columns = String.join(", ", columnNames);
+        for (int i = 0; i < columnOrder.size(); i++) placeholders.add("?");
+        String columns = String.join(", ", columnOrder);
         String values = String.join(", ", placeholders);
 
-        // Prefer MERGE/UPSERT semantics when case_instance_id is present to avoid duplicate key errors
-        if (rowValues.containsKey("case_instance_id") && isValidIdentifier("case_instance_id")) {
-            // H2 supports: MERGE INTO table (cols...) KEY(case_instance_id) VALUES(...)
-            try {
-                return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
-            } catch (Exception ignored) {
-                // fallback to INSERT
+        // Build UPDATE clause for duplicate key updates (exclude case_instance_id from updates since it's the key)
+        StringBuilder updateClause = new StringBuilder();
+        int paramIndex = 0;
+        for (String col : columnOrder) {
+            if (!col.equalsIgnoreCase("case_instance_id")) {
+                if (updateClause.length() > 0) updateClause.append(", ");
+                updateClause.append(col).append("=VALUES(").append(col).append(")");
             }
         }
 
-        // Fallback to simple INSERT
-        return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
+        // Require case_instance_id for proper upsert semantics
+        if (!columnOrder.stream().anyMatch(c -> c.equalsIgnoreCase("case_instance_id"))) {
+            log.warn("buildUpsertSql: case_instance_id not in columnOrder; falling back to INSERT (will cause duplicates on retry)");
+            return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
+        }
+
+        try {
+            String db = "";
+            try { db = jdbc.getDataSource() == null ? "" : jdbc.getDataSource().getConnection().getMetaData().getDatabaseProductName(); } catch (Exception ignored) {}
+            if (db != null) {
+                String dbLower = db.toLowerCase(java.util.Locale.ROOT);
+                if (dbLower.contains("h2")) {
+                    // H2 supports MERGE ... KEY syntax for upsert (native ANSI SQL)
+                    return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+                } else if (dbLower.contains("mysql") || dbLower.contains("mariadb")) {
+                    // MySQL/MariaDB: INSERT ... ON DUPLICATE KEY UPDATE
+                    if (updateClause.length() > 0) {
+                        return String.format("INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s", tableName, columns, values, updateClause);
+                    }
+                }
+            }
+            // Default to H2 MERGE syntax for other databases
+            return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+        } catch (Exception ignored) {
+            log.warn("buildUpsertSql: failed to detect database, defaulting to MERGE syntax");
+            return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+        }
+    }
+
+   /**
+    * Builds a dynamic UPSERT SQL statement from a row map.
+    *
+    * <p>This helper method delegates to {@link #buildUpsertSql(String, java.util.List)} after
+    * building a deterministic column order via {@link #upsertColumnOrder(Map)}.
+    *
+    * @param tableName the target table name
+    * @param rowValues the row map (column name to value); order is normalized internally
+    * @return a parameterized SQL string with ? placeholders
+    */
+    private String buildUpsertSql(String tableName, Map<String, Object> rowValues) {
+        // Build column list in deterministic order (include 'id' if present)
+        java.util.List<String> columnNames = new java.util.ArrayList<>();
+        // Ensure case_instance_id first when present
+        if (rowValues.containsKey("case_instance_id")) columnNames.add("case_instance_id");
+        for (String c : rowValues.keySet()) {
+            if (columnNames.contains(c)) continue;
+            columnNames.add(c);
+        }
+        return buildUpsertSql(tableName, columnNames);
     }
 
     /**
      * Validates that a table or column identifier is safe for use in SQL statements.
+     *
+     * <p>Pattern: Must match {@code ^[a-zA-Z_$][a-zA-Z0-9_$]*$} to prevent SQL injection.
+     * Allows alphanumeric characters, underscores, and dollar signs per standard DB naming conventions.
+     *
+     * @param identifier the table or column name to validate
+     * @return true if the identifier is safe for unquoted use in SQL; false otherwise
      */
     private boolean isValidIdentifier(String identifier) {
         if (identifier == null || identifier.trim().isEmpty()) return false;
         // Allow alphanumeric, underscore, and dollar sign (common DB naming conventions)
         return identifier.matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$");
+    }
+
+    /**
+     * Build deterministic column order for upsert operations (skips auto-managed 'id').
+     */
+    private java.util.List<String> upsertColumnOrder(Map<String, Object> row) {
+        java.util.List<String> cols = new java.util.ArrayList<>();
+        // ensure case_instance_id first if present
+        if (row.containsKey("case_instance_id")) cols.add("case_instance_id");
+        for (String k : row.keySet()) {
+            if (k.equalsIgnoreCase("case_instance_id")) continue;
+            // include id and any other columns in the natural map order
+            cols.add(k);
+        }
+        return cols;
     }
 }

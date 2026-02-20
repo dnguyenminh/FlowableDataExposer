@@ -1,20 +1,9 @@
 package vn.com.fecredit.flowable.exposer.flowable;
 
-import org.awaitility.Awaitility;
-import org.flowable.task.api.Task;
-import org.flowable.task.service.TaskService;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.junit.jupiter.api.Disabled;
 import org.springframework.boot.test.context.SpringBootTest;
-import vn.com.fecredit.flowable.exposer.entity.SysExposeRequest;
-import vn.com.fecredit.flowable.exposer.repository.SysExposeRequestRepository;
 
-import java.time.Duration;
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
-@org.junit.jupiter.api.Disabled("canonical integration test present in repo-level src/test/java — see that copy")
+@Disabled("canonical integration test present in repo-level src/test/java — see that copy")
 @SpringBootTest(classes = vn.com.fecredit.flowable.exposer.FlowableExposerTestApplicationFinal.class)
 class CaseLifecycleIntegrationTest {
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "/metadata/index-mapping-schema.json",
+  "class": "ItemIndex",
+  "workClassReference": "Order",
+  "description": "Sample index rule for Item plain fields",
+  "table": "item_index",
+  "jsonPath": "$.items",
+  "mappings": [
+    { "jsonPath": "$.id", "plainColumn": "id", "type": "string" },
+    { "jsonPath": "$.sku", "plainColumn": "sku", "type": "string" }
+  ]
+}

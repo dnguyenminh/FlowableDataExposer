@@ -2,19 +2,15 @@ package vn.com.fecredit.flowable.exposer.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.TestPropertySource;
 import vn.com.fecredit.flowable.exposer.entity.SysExposeClassDef;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
-
-import org.springframework.test.context.TestPropertySource;
-
-// ... other imports
 
 @SpringBootTest(classes = vn.com.fecredit.flowable.exposer.FlowableExposerTestApplicationFinal.class)
 @TestPropertySource(properties = "spring.main.allow-bean-definition-overriding=true")

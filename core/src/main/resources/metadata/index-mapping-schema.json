@@ -27,7 +27,6 @@
           "nullable": { "type": "boolean" },
           "arrayIndex": { "type": "integer" },
           "exportDest": { "type": "array", "items": { "type": "string" } },
-          "exportMode": { "type": "string", "enum": ["single","list","map","plain"] },
           "table": { "type": "string" },
           "tableName": { "type": "string" },
           "columns": {
