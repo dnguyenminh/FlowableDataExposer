@@ -1,13 +1,28 @@
 {
   "$schema": "/metadata/index-mapping-schema.json",
-  "workClassReference": "Order",
-  "class": "Order",
-  "entityType": "Order",
-  "jsonPath": "$.items",
+  "workClassReference": "Item",
+  "class": "Item",
+  "entityType": "Item",
+  "jsonPath": "$",
   "table": "item_index",
   "mappings": [
-    { "jsonPath": "$.id", "plainColumn": "item_id", "type": "VARCHAR(255)", "nullable": false },
-    { "jsonPath": "$.sku", "plainColumn": "sku", "type": "VARCHAR(100)", "nullable": true },
-    { "jsonPath": "$.price", "plainColumn": "price", "type": "DECIMAL(19,4)", "nullable": true }
+    {
+      "jsonPath": "$.id",
+      "plainColumn": "item_id",
+      "type": "VARCHAR(255)",
+      "nullable": false
+    },
+    {
+      "jsonPath": "$.sku",
+      "plainColumn": "sku",
+      "type": "VARCHAR(100)",
+      "nullable": true
+    },
+    {
+      "jsonPath": "$.price",
+      "plainColumn": "price",
+      "type": "DECIMAL(19,4)",
+      "nullable": true
+    }
   ]
 }

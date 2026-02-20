@@ -1,11 +1,16 @@
 {
   "$schema": "/metadata/index-mapping-schema.json",
-  "workClassReference": "Order",
-  "class": "Order",
-  "entityType": "Order",
-  "jsonPath": "$.meta",
+  "workClassReference": "Meta",
+  "class": "Meta",
+  "entityType": "Meta",
+  "jsonPath": "$",
   "table": "meta_index",
   "mappings": [
-    { "jsonPath": "$.priority", "plainColumn": "priority", "type": "VARCHAR(50)", "nullable": true }
+    {
+      "jsonPath": "$.priority",
+      "plainColumn": "priority",
+      "type": "VARCHAR(50)",
+      "nullable": true
+    }
   ]
 }

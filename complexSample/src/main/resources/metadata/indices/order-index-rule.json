@@ -1,9 +1,15 @@
 {
-  "class": "Order",
-  "entityType": "Order",
-  "jsonPath": "$.orderRule",
+  "class": "OrderRules",
+  "entityType": "OrderRules",
+  "jsonPath": "$",
   "table": "order_rule_index",
   "mappings": [
-    { "jsonPath": "$.result", "plainColumn": "rule_result", "type": "LONGTEXT", "nullable": true }
-  ]
+    {
+      "jsonPath": "$.result",
+      "plainColumn": "rule_result",
+      "type": "LONGTEXT",
+      "nullable": true
+    }
+  ],
+  "workClassReference": "OrderRules"
 }
