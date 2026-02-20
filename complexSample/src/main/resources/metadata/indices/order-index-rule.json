@@ -1,4 +1,5 @@
 {
+  "$schema": "/metadata/index-mapping-schema.json",
   "class": "OrderRules",
   "entityType": "OrderRules",
   "jsonPath": "$",
