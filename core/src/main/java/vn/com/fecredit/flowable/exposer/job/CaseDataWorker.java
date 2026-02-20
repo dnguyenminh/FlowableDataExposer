@@ -1001,7 +1001,7 @@ public class CaseDataWorker {
                 case "decimal": case "number": return "DECIMAL(19,4)";
                 case "boolean": return "BOOLEAN";
                 case "timestamp": case "datetime": case "date": return "TIMESTAMP";
-                case "text": return isH2() ? "CLOB" : "LONGTEXT";
+                case "text": return "LONGTEXT";
                 case "string": default:
                     // if explicit VARCHAR size provided (e.g., VARCHAR(100)) return as-is
                     if (h.startsWith("varchar") || h.startsWith("char") || h.startsWith("decimal")) return hint;
