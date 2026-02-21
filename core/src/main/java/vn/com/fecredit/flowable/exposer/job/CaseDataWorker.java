@@ -1499,27 +1499,42 @@ public class CaseDataWorker {
      */
     private void h2SelectUpdateInsert(String tableName, java.util.List<String> columnOrder, Map<String, Object> rowValues) {
         if (tableName == null || tableName.trim().isEmpty() || columnOrder == null || columnOrder.isEmpty()) return;
+        // Normalize table name to uppercase for H2 visibility
+        String upTable = tableName.toUpperCase(java.util.Locale.ROOT);
         try {
             // If no case_instance_id present we cannot perform key-based upsert; attempt plain INSERT
             Object keyVal = rowValues.get("case_instance_id");
-            String placeholders = String.join(", ", java.util.Collections.nCopies(columnOrder.size(), "?"));
-            String columns = String.join(", ", columnOrder);
-            Object[] insertParams = columnOrder.stream().map(rowValues::get).toArray();
+            // Normalize column names to actual used names (preserve case in params)
+            java.util.List<String> normalizedCols = new java.util.ArrayList<>();
+            for (String c : columnOrder) normalizedCols.add(c);
+
+            String placeholders = String.join(", ", java.util.Collections.nCopies(normalizedCols.size(), "?"));
+            String columns = String.join(", ", normalizedCols);
+            Object[] insertParams = normalizedCols.stream().map(rowValues::get).toArray();
 
             if (keyVal == null) {
-                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
+                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", upTable, columns, placeholders);
                 jdbc.update(insertSql, insertParams);
                 return;
             }
 
-            // Check existence
-            Integer count = 0;
-            try {
-                count = jdbc.queryForObject(String.format("SELECT COUNT(1) FROM %s WHERE case_instance_id = ?", tableName), new Object[]{keyVal}, Integer.class);
-            } catch (Exception ex) {
-                // Some tables (index tables) may have different uniqueness semantics; fall back to insert
-                log.debug("h2SelectUpdateInsert: existence check failed for table {}: {}", tableName, ex.getMessage());
-                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
+            // Small retry loop to tolerate visibility delays after DDL in different connections
+            int attempts = 3;
+            Integer count = null;
+            for (int attempt = 1; attempt <= attempts; attempt++) {
+                try {
+                    count = jdbc.queryForObject(String.format("SELECT COUNT(1) FROM %s WHERE case_instance_id = ?", upTable), new Object[]{keyVal}, Integer.class);
+                    break;
+                } catch (Exception ex) {
+                    log.debug("h2SelectUpdateInsert: existence check attempt {} failed for table {}: {}", attempt, upTable, ex.getMessage());
+                    try { Thread.sleep(50L * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    count = null;
+                }
+            }
+
+            if (count == null) {
+                // Fall back to insert if we could not query
+                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", upTable, columns, placeholders);
                 jdbc.update(insertSql, insertParams);
                 return;
             }
@@ -1528,7 +1543,7 @@ public class CaseDataWorker {
                 // Build UPDATE statement for non-key columns
                 StringBuilder set = new StringBuilder();
                 java.util.List<Object> params = new java.util.ArrayList<>();
-                for (String col : columnOrder) {
+                for (String col : normalizedCols) {
                     if (col.equalsIgnoreCase("case_instance_id")) continue;
                     if (set.length() > 0) set.append(", ");
                     set.append(col).append(" = ?");
@@ -1536,18 +1551,18 @@ public class CaseDataWorker {
                 }
                 // No non-key columns to update: nothing to do
                 if (params.isEmpty()) {
-                    log.debug("h2SelectUpdateInsert: nothing to update for table {} and key {}", tableName, keyVal);
+                    log.debug("h2SelectUpdateInsert: nothing to update for table {} and key {}", upTable, keyVal);
                     return;
                 }
                 params.add(keyVal);
-                String updateSql = String.format("UPDATE %s SET %s WHERE case_instance_id = ?", tableName, set.toString());
+                String updateSql = String.format("UPDATE %s SET %s WHERE case_instance_id = ?", upTable, set.toString());
                 jdbc.update(updateSql, params.toArray());
             } else {
-                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
+                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", upTable, columns, placeholders);
                 jdbc.update(insertSql, insertParams);
             }
         } catch (Exception ex) {
-            log.error("h2SelectUpdateInsert: failed for table {}: {}", tableName, ex.getMessage(), ex);
+            log.error("h2SelectUpdateInsert: failed for table {}: {}", upTable, ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
     }
