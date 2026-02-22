@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -34,18 +33,12 @@ public class CaseDataWorker {
 
     private static final Logger log = LoggerFactory.getLogger(CaseDataWorker.class);
 
-    @Autowired
-    private JdbcTemplate jdbc;
-    @Autowired
-    private ObjectMapper om;
-    @Autowired
-    private MetadataAnnotator annotator;
-    @Autowired
-    private MetadataResolver resolver;
-    @Autowired
-    private SysExposeRequestRepository reqRepo;
-    @Autowired
-    private vn.com.fecredit.flowable.exposer.service.IndexLoader indexLoader;
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper om;
+    private final MetadataAnnotator annotator;
+    private final MetadataResolver resolver;
+    private final SysExposeRequestRepository reqRepo;
+    private final vn.com.fecredit.flowable.exposer.service.IndexLoader indexLoader;
 
     // Cache H2 detection result and common metadata to avoid repeated connection grabs (which can exhaust the pool)
     private Boolean cachedIsH2 = null;
@@ -54,6 +47,20 @@ public class CaseDataWorker {
     private final java.util.concurrent.ConcurrentHashMap<String, Set<String>> cachedTableColumns = new java.util.concurrent.ConcurrentHashMap<>();
     // Simple throttle to avoid rapid-fire metadata/DDL DB calls that can exhaust HikariCP in CI
     private final java.util.concurrent.Semaphore dbThrottle = new java.util.concurrent.Semaphore(12);
+
+    public CaseDataWorker(JdbcTemplate jdbc,
+                          ObjectMapper om,
+                          MetadataAnnotator annotator,
+                          MetadataResolver resolver,
+                          SysExposeRequestRepository reqRepo,
+                          vn.com.fecredit.flowable.exposer.service.IndexLoader indexLoader) {
+        this.jdbc = jdbc;
+        this.om = om;
+        this.annotator = annotator;
+        this.resolver = resolver;
+        this.reqRepo = reqRepo;
+        this.indexLoader = indexLoader;
+    }
 
     @Scheduled(fixedDelay = 1000)
     public void pollAndProcess() {
@@ -318,6 +325,10 @@ public class CaseDataWorker {
                 if (fm.jsonPath == null) continue;
 
                 try {
+                    // extract the raw value using JsonPath and prepare working copy
+                    Object extractedValue = JsonPath.read(annotatedJson, fm.jsonPath);
+                    Object valueToPut = extractedValue;
+
                     // Fix: check for empty collections or empty JSON strings
                     if (isEmptyResult(valueToPut)) {
                         valueToPut = null;
@@ -1235,7 +1246,7 @@ public class CaseDataWorker {
          cachedIsH2 = false;
          return false;
      }
-  
+   
      private String determineColumnType(Object value, String hint) {
         // If mapping provides a hint, honor common types
         if (hint != null) {
@@ -1283,123 +1294,123 @@ public class CaseDataWorker {
  
         // Default for complex types (JSON, arrays, objects)
         return isH2() ? "CLOB" : "LONGTEXT";
-    }
+     }
 
     /**
      * Builds a dynamic UPSERT SQL statement based on the provided table name and column order.
      */
-    private String buildUpsertSql(String actualTableName, java.util.List<String> columnOrder) {
-        if (columnOrder == null || columnOrder.isEmpty()) throw new IllegalArgumentException("No columns to upsert");
-        java.util.List<String> placeholders = new java.util.ArrayList<>();
-        for (int i = 0; i < columnOrder.size(); i++) placeholders.add("?");
-        String values = String.join(", ", placeholders);
+     private String buildUpsertSql(String actualTableName, java.util.List<String> columnOrder) {
+         if (columnOrder == null || columnOrder.isEmpty()) throw new IllegalArgumentException("No columns to upsert");
+         java.util.List<String> placeholders = new java.util.ArrayList<>();
+         for (int i = 0; i < columnOrder.size(); i++) placeholders.add("?");
+         String values = String.join(", ", placeholders);
 
-        // Identify key column and build update assignments
-        String keyCol = null;
-        StringBuilder updateAssignments = new StringBuilder();
-        for (String col : columnOrder) {
-            if (col.equalsIgnoreCase("case_instance_id")) {
-                keyCol = col;
-                continue;
-            }
-            if (updateAssignments.length() > 0) updateAssignments.append(", ");
-            updateAssignments.append(safeQuote(col)).append("=src.").append(safeQuote(col));
-        }
+         // Identify key column and build update assignments
+         String keyCol = null;
+         StringBuilder updateAssignments = new StringBuilder();
+         for (String col : columnOrder) {
+             if (col.equalsIgnoreCase("case_instance_id")) {
+                 keyCol = col;
+                 continue;
+             }
+             if (updateAssignments.length() > 0) updateAssignments.append(", ");
+             updateAssignments.append(safeQuote(col)).append("=src.").append(safeQuote(col));
+         }
 
-        if (keyCol == null) {
-            String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
-            return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
-        }
+         if (keyCol == null) {
+             String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+             return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
+         }
 
-        try {
-            String db = "";
-            try { db = jdbc.getDataSource() == null ? "" : jdbc.getDataSource().getConnection().getMetaData().getDatabaseProductName(); } catch (Exception ignored) {}
-            String dbLower = db == null ? "" : db.toLowerCase(java.util.Locale.ROOT);
+         try {
+             String db = "";
+             try { db = jdbc.getDataSource() == null ? "" : jdbc.getDataSource().getConnection().getMetaData().getDatabaseProductName(); } catch (Exception ignored) {}
+             String dbLower = db == null ? "" : db.toLowerCase(java.util.Locale.ROOT);
 
-            if (dbLower.contains("h2")) {
-                return "__H2_SELECT_UPDATE_INSERT__";
-            } else if (dbLower.contains("postgres") || dbLower.contains("oracle") || dbLower.contains("sqlserver")) {
-                String[] srcColsArr = columnOrder.stream().map(this::safeQuote).toArray(String[]::new);
-                String srcCols = String.join(", ", srcColsArr);
-                String insertVals = java.util.stream.IntStream.range(0, columnOrder.size()).mapToObj(i -> "src." + safeQuote(columnOrder.get(i))).collect(java.util.stream.Collectors.joining(", "));
-                StringBuilder merge = new StringBuilder();
-                merge.append("MERGE INTO ").append(safeQuote(actualTableName)).append(" AS t USING (VALUES (").append(values).append(")) AS src(").append(srcCols).append(") ON t.").append(safeQuote(keyCol)).append(" = src.").append(safeQuote(keyCol)).append(" ");
-                if (updateAssignments.length() > 0) merge.append("WHEN MATCHED THEN UPDATE SET ").append(updateAssignments.toString()).append(" ");
-                merge.append("WHEN NOT MATCHED THEN INSERT (").append(srcCols).append(") VALUES (").append(insertVals).append(")");
-                return merge.toString();
-            } else if (dbLower.contains("mysql") || dbLower.contains("mariadb")) {
-                String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
-                StringBuilder updateClauseMysql = new StringBuilder();
-                for (String col : columnOrder) {
-                    if (col.equalsIgnoreCase("case_instance_id")) continue;
-                    if (updateClauseMysql.length() > 0) updateClauseMysql.append(", ");
-                    updateClauseMysql.append(safeQuote(col)).append("=VALUES(").append(safeQuote(col)).append(")");
-                }
-                return String.format("INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s", safeQuote(actualTableName), colsQuoted, values, updateClauseMysql.toString());
-            }
-            String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
-            return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
-        } catch (Exception ignored) {
-            String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
-            return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
-        }
-    }
+             if (dbLower.contains("h2")) {
+                 return "__H2_SELECT_UPDATE_INSERT__";
+             } else if (dbLower.contains("postgres") || dbLower.contains("oracle") || dbLower.contains("sqlserver")) {
+                 String[] srcColsArr = columnOrder.stream().map(this::safeQuote).toArray(String[]::new);
+                 String srcCols = String.join(", ", srcColsArr);
+                 String insertVals = java.util.stream.IntStream.range(0, columnOrder.size()).mapToObj(i -> "src." + safeQuote(columnOrder.get(i))).collect(java.util.stream.Collectors.joining(", "));
+                 StringBuilder merge = new StringBuilder();
+                 merge.append("MERGE INTO ").append(safeQuote(actualTableName)).append(" AS t USING (VALUES (").append(values).append(")) AS src(").append(srcCols).append(") ON t.").append(safeQuote(keyCol)).append(" = src.").append(safeQuote(keyCol)).append(" ");
+                 if (updateAssignments.length() > 0) merge.append("WHEN MATCHED THEN UPDATE SET ").append(updateAssignments.toString()).append(" ");
+                 merge.append("WHEN NOT MATCHED THEN INSERT (").append(srcCols).append(") VALUES (").append(insertVals).append(")");
+                 return merge.toString();
+             } else if (dbLower.contains("mysql") || dbLower.contains("mariadb")) {
+                 String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+                 StringBuilder updateClauseMysql = new StringBuilder();
+                 for (String col : columnOrder) {
+                     if (col.equalsIgnoreCase("case_instance_id")) continue;
+                     if (updateClauseMysql.length() > 0) updateClauseMysql.append(", ");
+                     updateClauseMysql.append(safeQuote(col)).append("=VALUES(").append(safeQuote(col)).append(")");
+                 }
+                 return String.format("INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s", safeQuote(actualTableName), colsQuoted, values, updateClauseMysql.toString());
+             }
+             String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+             return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
+         } catch (Exception ignored) {
+             String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+             return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
+         }
+     }
+
+     /**
+      * H2-specific robust fallback: perform a SELECT to check existence then UPDATE or INSERT atomically
+      */
+     private void h2SelectUpdateInsert(String actualTable, java.util.List<String> columnOrder, Map<String, Object> rowValues) {
+         if (actualTable == null || actualTable.trim().isEmpty() || columnOrder == null || columnOrder.isEmpty()) return;
+         try {
+             Object keyVal = rowValues.get("case_instance_id");
+             String placeholders = String.join(", ", java.util.Collections.nCopies(columnOrder.size(), "?"));
+             Object[] insertParams = columnOrder.stream().map(rowValues::get).toArray();
+             String safeCols = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+
+             if (keyVal == null) {
+                 jdbc.update(String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTable), safeCols, placeholders), insertParams);
+                 return;
+             }
+
+             Integer count = null;
+             try {
+                 String existsSql = String.format("SELECT COUNT(1) FROM %s WHERE %s = ?", safeQuote(actualTable), safeQuote("case_instance_id"));
+                 count = jdbc.queryForObject(existsSql, new Object[]{keyVal}, Integer.class);
+             } catch (Exception ex) {
+                 log.debug("h2SelectUpdateInsert: existence check failed for {}: {}", actualTable, ex.getMessage());
+             }
+
+             if (count != null && count > 0) {
+                 StringBuilder set = new StringBuilder();
+                 java.util.List<Object> params = new java.util.ArrayList<>();
+                 for (String col : columnOrder) {
+                     if (col.equalsIgnoreCase("case_instance_id")) continue;
+                     if (set.length() > 0) set.append(", ");
+                     set.append(safeQuote(col)).append(" = ?");
+                     params.add(rowValues.get(col));
+                 }
+                 if (params.isEmpty()) return;
+                 params.add(keyVal);
+                 jdbc.update(String.format("UPDATE %s SET %s WHERE %s = ?", safeQuote(actualTable), set.toString(), safeQuote("case_instance_id")), params.toArray());
+             } else {
+                 jdbc.update(String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTable), safeCols, placeholders), insertParams);
+             }
+         } catch (Exception ex) {
+             log.error("h2SelectUpdateInsert failed for table {}: {}", actualTable, ex.getMessage(), ex);
+             throw new RuntimeException(ex);
+         }
+     }
 
     /**
-     * H2-specific robust fallback: perform a SELECT to check existence then UPDATE or INSERT atomically
+     * Builds a dynamic UPSERT SQL statement from a row map.
+     *
+     * <p>This helper method delegates to {@link #buildUpsertSql(String, java.util.List)} after
+     * building a deterministic column order via {@link #upsertColumnOrder(Map)}.
+     *
+     * @param tableName the target table name
+     * @param rowValues the row map (column name to value); order is normalized internally
+     * @return a parameterized SQL string with ? placeholders
      */
-    private void h2SelectUpdateInsert(String actualTable, java.util.List<String> columnOrder, Map<String, Object> rowValues) {
-        if (actualTable == null || actualTable.trim().isEmpty() || columnOrder == null || columnOrder.isEmpty()) return;
-        try {
-            Object keyVal = rowValues.get("case_instance_id");
-            String placeholders = String.join(", ", java.util.Collections.nCopies(columnOrder.size(), "?"));
-            Object[] insertParams = columnOrder.stream().map(rowValues::get).toArray();
-            String safeCols = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
-
-            if (keyVal == null) {
-                jdbc.update(String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTable), safeCols, placeholders), insertParams);
-                return;
-            }
-
-            Integer count = null;
-            try {
-                String existsSql = String.format("SELECT COUNT(1) FROM %s WHERE %s = ?", safeQuote(actualTable), safeQuote("case_instance_id"));
-                count = jdbc.queryForObject(existsSql, new Object[]{keyVal}, Integer.class);
-            } catch (Exception ex) {
-                log.debug("h2SelectUpdateInsert: existence check failed for {}: {}", actualTable, ex.getMessage());
-            }
-
-            if (count != null && count > 0) {
-                StringBuilder set = new StringBuilder();
-                java.util.List<Object> params = new java.util.ArrayList<>();
-                for (String col : columnOrder) {
-                    if (col.equalsIgnoreCase("case_instance_id")) continue;
-                    if (set.length() > 0) set.append(", ");
-                    set.append(safeQuote(col)).append(" = ?");
-                    params.add(rowValues.get(col));
-                }
-                if (params.isEmpty()) return;
-                params.add(keyVal);
-                jdbc.update(String.format("UPDATE %s SET %s WHERE %s = ?", safeQuote(actualTable), set.toString(), safeQuote("case_instance_id")), params.toArray());
-            } else {
-                jdbc.update(String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTable), safeCols, placeholders), insertParams);
-            }
-        } catch (Exception ex) {
-            log.error("h2SelectUpdateInsert failed for table {}: {}", actualTable, ex.getMessage(), ex);
-            throw new RuntimeException(ex);
-        }
-    }
-
-   /**
-    * Builds a dynamic UPSERT SQL statement from a row map.
-    *
-    * <p>This helper method delegates to {@link #buildUpsertSql(String, java.util.List)} after
-    * building a deterministic column order via {@link #upsertColumnOrder(Map)}.
-    *
-    * @param tableName the target table name
-    * @param rowValues the row map (column name to value); order is normalized internally
-    * @return a parameterized SQL string with ? placeholders
-    */
     private String buildUpsertSql(String tableName, Map<String, Object> rowValues) {
         // Build column list in deterministic order (include 'id' if present)
         java.util.List<String> columnNames = new java.util.ArrayList<>();
