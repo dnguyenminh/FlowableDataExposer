@@ -48,13 +48,6 @@ sourceSets {
   test {
     java {
       srcDirs = ['src/test/java']
-      // include 'vn/com/fecredit/flowable/exposer/MetadataControllerTest.java',
-      //         'vn/com/fecredit/flowable/exposer/MetadataUiTest.java',
-      //         'vn/com/fecredit/flowable/exposer/OrderControllerTest.java',
-      //         'vn/com/fecredit/flowable/exposer/OrdersUiTest.java',
-      //         'vn/com/fecredit/flowable/exposer/OrdersE2eIT.java',
-      //         'vn/com/fecredit/flowable/exposer/MetadataDbIntegrationTest.java',
-      //         'vn/com/fecredit/flowable/exposer/MetadataResolverTest.java'
     }
     resources.srcDirs = ['src/test/resources']
   }

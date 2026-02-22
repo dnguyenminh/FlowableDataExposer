@@ -19,7 +19,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = ComplexSampleTestApplication.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = ComplexSampleTestApplication.class, properties = {
+        "spring.task.scheduling.enabled=false",
+        "flowable.job-executor-activate=false"
+})
 public class ExposeMappingE2eIT {
 
     @LocalServerPort
