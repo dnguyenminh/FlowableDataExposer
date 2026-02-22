@@ -140,6 +140,9 @@ public class ExposeMappingE2eIT {
                     }
                 });
 
+        // sanity-check plain table contents before exercising the REST API
+        verifyPlainTableForCase(caseInstanceId, TOTAL, CUSTOMER_ID);
+
         // verify GET single
         ResponseEntity<Map> single = rest.getForEntity("http://localhost:" + port + "/api/orders/" + caseInstanceId, Map.class);
         assertThat(single.getStatusCode().is2xxSuccessful()).isTrue();

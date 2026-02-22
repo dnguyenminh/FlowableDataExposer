@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.com.fecredit.complexsample.entity.CasePlainOrder;
 import vn.com.fecredit.complexsample.repository.CasePlainOrderRepository;
 import com.jayway.jsonpath.JsonPath;
+import org.springframework.jdbc.core.JdbcTemplate;
 import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
 import vn.com.fecredit.flowable.exposer.util.ModelValidatorRenderer;
 
@@ -23,13 +24,16 @@ public class OrderController {
     private final RuntimeService runtimeService;
     private final CasePlainOrderRepository plainRepo;
     private final org.springframework.context.ApplicationContext appCtx;
+    private final JdbcTemplate jdbc; // used for fallback lookups
 
     public OrderController(RuntimeService runtimeService,
                            CasePlainOrderRepository plainRepo,
-                           org.springframework.context.ApplicationContext appCtx) {
+                           org.springframework.context.ApplicationContext appCtx,
+                           JdbcTemplate jdbc) {
         this.runtimeService = runtimeService;
         this.plainRepo = plainRepo;
         this.appCtx = appCtx;
+        this.jdbc = jdbc;
     }
 
     @PostMapping
@@ -119,7 +123,15 @@ public class OrderController {
                     Double total = p.getOrderTotal();
                     if (total == null && p.getPlainPayload() != null) {
                         try {
-                            Object t = JsonPath.read(p.getPlainPayload(), "$.order_total");
+                            Object t = null;
+                            try {
+                                t = JsonPath.read(p.getPlainPayload(), "$.order_total");
+                            } catch (Exception ignore) {
+                                // fallback to alternate field name used in sample payload
+                                try {
+                                    t = JsonPath.read(p.getPlainPayload(), "$.total");
+                                } catch (Exception ignore2) { }
+                            }
                             if (t instanceof Number) {
                                 total = ((Number) t).doubleValue();
                             }
@@ -127,6 +139,21 @@ public class OrderController {
                             // ignore
                         }
                     }
+                    if (total == null) {
+                        // as a last resort query raw payload via JDBC to avoid any JPA caching/LOB issues
+                        try {
+                            String raw = jdbc.queryForObject(
+                                    "SELECT plain_payload FROM case_plain_order WHERE case_instance_id = ?", String.class, 
+                                    caseInstanceId);
+                            if (raw != null) {
+                                Object t2 = JsonPath.read(raw, "$.total");
+                                if (t2 instanceof Number) {
+                                    total = ((Number) t2).doubleValue();
+                                }
+                            }
+                        } catch (Exception ignored) { }
+                    }
+                    out.put("customerId", p.getCustomerId());
                     out.put("orderTotal", total);
                     out.put("orderPriority", p.getOrderPriority());
                     out.put("approvalStatus", p.getApprovalStatus());
@@ -145,6 +172,7 @@ public class OrderController {
         for (var p : list) {
                 Map<String, Object> m = new HashMap<>();
                 m.put("caseInstanceId", p.getCaseInstanceId());
+                m.put("customerId", p.getCustomerId());
                 m.put("orderTotal", p.getOrderTotal());
                 m.put("orderPriority", p.getOrderPriority());
                 m.put("approvalStatus", p.getApprovalStatus());

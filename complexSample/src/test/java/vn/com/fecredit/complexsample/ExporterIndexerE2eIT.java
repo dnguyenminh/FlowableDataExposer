@@ -28,7 +28,6 @@ public class ExporterIndexerE2eIT {
     @Autowired
     JdbcTemplate jdbc;
 
-    @org.junit.jupiter.api.Disabled("flaky H2 errors in CI; see earlier logs")
     @Test
     void indexer_populates_index_tables_from_blob_store() {
         // start case with payload that exercises multiple indices (order, items, params)
