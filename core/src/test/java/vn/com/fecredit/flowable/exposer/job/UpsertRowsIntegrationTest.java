@@ -58,4 +58,41 @@ class UpsertRowsIntegrationTest {
         assertThat(rows.get(0).get("CASE_INSTANCE_ID")).isEqualTo("c1");
         assertThat(rows.get(0).get("ID")).isEqualTo("I1");
     }
+
+    @Test
+    void h2_case_sensitive_identifiers_are_uppercased() throws Exception {
+        // ensure createDefaultWorkTable produces uppercase column names when H2 is in use
+        DriverManagerDataSource ds = new DriverManagerDataSource();
+        ds.setDriverClassName("org.h2.Driver");
+        ds.setUrl("jdbc:h2:mem:testdb_case;DB_CLOSE_DELAY=-1");
+        ds.setUsername("sa");
+        ds.setPassword("");
+
+        JdbcTemplate jdbc = new JdbcTemplate(ds);
+        CaseDataWorker worker = new CaseDataWorker();
+        java.lang.reflect.Field f = CaseDataWorker.class.getDeclaredField("jdbc");
+        f.setAccessible(true);
+        f.set(worker, jdbc);
+
+        Map<String, Object> row = new HashMap<>();
+        row.put("case_instance_id", "C1");
+
+        java.lang.reflect.Method create = CaseDataWorker.class.getDeclaredMethod("createDefaultWorkTable", String.class, java.util.Map.class);
+        create.setAccessible(true);
+        create.invoke(worker, "sample_table", row);
+
+        // verify metadata from H2 shows uppercase names
+        java.sql.Connection conn = ds.getConnection();
+        try (java.sql.ResultSet rs = conn.getMetaData().getColumns(null, null, "SAMPLE_TABLE", null)) {
+            boolean found = false;
+            while (rs.next()) {
+                String colName = rs.getString("COLUMN_NAME");
+                if ("CASE_INSTANCE_ID".equals(colName)) {
+                    found = true;
+                    break;
+                }
+            }
+            assertThat(found).isTrue();
+        }
+    }
 }

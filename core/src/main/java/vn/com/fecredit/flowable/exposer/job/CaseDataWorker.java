@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Background worker responsible for consuming {@code SysExposeRequest}s
@@ -49,6 +50,7 @@ public class CaseDataWorker {
     // Cache H2 detection result and common metadata to avoid repeated connection grabs (which can exhaust the pool)
     private Boolean cachedIsH2 = null;
     private volatile Set<String> cachedExistingTables = null; // uppercase table names
+    private final Map<String, String> logicalToActualTableNames = new ConcurrentHashMap<>();
     private final java.util.concurrent.ConcurrentHashMap<String, Set<String>> cachedTableColumns = new java.util.concurrent.ConcurrentHashMap<>();
     // Simple throttle to avoid rapid-fire metadata/DDL DB calls that can exhaust HikariCP in CI
     private final java.util.concurrent.Semaphore dbThrottle = new java.util.concurrent.Semaphore(12);
@@ -167,22 +169,31 @@ public class CaseDataWorker {
     }
 
     private Map<String, Object> fetchLatestRow(String caseInstanceId) {
-        log.debug("Querying latest sys_case_data_store row for caseInstanceId={}", caseInstanceId);
+        log.info("Querying latest sys_case_data_store row for caseInstanceId={}", caseInstanceId);
         try {
-            return jdbc.queryForObject(
-                    "SELECT entity_type, payload, created_at FROM sys_case_data_store WHERE case_instance_id = ? ORDER BY created_at DESC LIMIT 1",
-                    new Object[]{caseInstanceId}, (rs, rowNum) -> {
-                        java.util.Map<String, Object> row = new java.util.HashMap<>();
-                        row.put("entityType", rs.getString("entity_type"));
-                        row.put("payload", rs.getString("payload"));
-                        java.sql.Timestamp ts = rs.getTimestamp("created_at");
-                        if (ts != null) {
-                            row.put("createdAt", ts.toInstant());
-                        }
-                        return row;
-                    });
+            // Use unquoted identifiers to be compatible with DATABASE_TO_LOWER=TRUE and standard H2/Postgres
+            String sql = "SELECT entity_type, payload, created_at FROM sys_case_data_store WHERE case_instance_id = ? ORDER BY created_at DESC LIMIT 1";
+            List<Map<String, Object>> rows = jdbc.queryForList(sql, caseInstanceId);
+            
+            if (rows.isEmpty()) {
+                log.warn("fetchLatestRow: No row found for caseInstanceId={}", caseInstanceId);
+                return null;
+            }
+            
+            Map<String, Object> row = rows.get(0);
+            Map<String, Object> result = new java.util.HashMap<>();
+            result.put("entityType", row.get("entity_type") != null ? row.get("entity_type") : row.get("ENTITY_TYPE"));
+            result.put("payload", row.get("payload") != null ? row.get("payload") : row.get("PAYLOAD"));
+            
+            Object createdAt = row.get("created_at") != null ? row.get("created_at") : row.get("CREATED_AT");
+            if (createdAt instanceof java.sql.Timestamp ts) {
+                result.put("createdAt", ts.toInstant());
+            } else if (createdAt instanceof java.time.Instant inst) {
+                result.put("createdAt", inst);
+            }
+            return result;
         } catch (Exception ex) {
-            log.debug("fetchLatestRow failed for {}: {}", caseInstanceId, ex.getMessage());
+            log.error("fetchLatestRow failed for {}: {}", caseInstanceId, ex.getMessage(), ex);
             return null;
         }
     }
@@ -307,20 +318,23 @@ public class CaseDataWorker {
                 if (fm.jsonPath == null) continue;
 
                 try {
-                    Object extractedValue = JsonPath.read(annotatedJson, fm.jsonPath);
-                    Object valueToPut = extractedValue;
+                    // Fix: check for empty collections or empty JSON strings
+                    if (isEmptyResult(valueToPut)) {
+                        valueToPut = null;
+                    }
+
                     // Convert complex JSON structures (maps/arrays) into a JSON string for DB persistence
-                    if (extractedValue != null
-                            && !(extractedValue instanceof String)
-                            && !(extractedValue instanceof Number)
-                            && !(extractedValue instanceof Boolean)
-                            && !(extractedValue instanceof java.time.temporal.Temporal)
-                            && !(extractedValue instanceof java.util.Date)) {
+                    if (valueToPut != null
+                            && !(valueToPut instanceof String)
+                            && !(valueToPut instanceof Number)
+                            && !(valueToPut instanceof Boolean)
+                            && !(valueToPut instanceof java.time.temporal.Temporal)
+                            && !(valueToPut instanceof java.util.Date)) {
                         try {
-                            valueToPut = om.writeValueAsString(extractedValue);
+                            valueToPut = om.writeValueAsString(valueToPut);
                         } catch (Exception se) {
                             // fallback to toString()
-                            valueToPut = extractedValue.toString();
+                            valueToPut = valueToPut.toString();
                         }
                     }
 
@@ -807,8 +821,6 @@ public class CaseDataWorker {
 
     /**
      * Dynamically inserts or updates a row in the specified table.
-     * If the table does not exist, creates it with a default schema based on rowValues.
-     * Uses MERGE or INSERT ... ON DUPLICATE KEY UPDATE for upsert semantics.
      */
     private void upsertRowByMetadata(String tableName, Map<String, Object> rowValues) {
         if (tableName == null || tableName.trim().isEmpty() || rowValues.isEmpty()) {
@@ -830,65 +842,43 @@ public class CaseDataWorker {
                 log.info("upsertRowByMetadata: successfully created table {}", tableName);
             }
 
+            // Resolve actual table name from DB (handles case-sensitivity issues)
+            String actualTable = resolveActualTableName(tableName);
+
             // Ensure all columns referenced in rowValues exist before attempting insert
-            ensureColumnsPresent(tableName, rowValues, null);
+            ensureColumnsPresent(actualTable, rowValues, null);
 
             // Build deterministic column order and dynamic upsert SQL
             java.util.List<String> colOrder = upsertColumnOrder(rowValues);
-            String upsertSql = buildUpsertSql(tableName, colOrder);
-            log.debug("upsertRowByMetadata: executing SQL for table {} with {} columns", tableName, colOrder.size());
+            String upsertSql = buildUpsertSql(actualTable, colOrder);
+            log.debug("upsertRowByMetadata: executing SQL for table {} with {} columns", actualTable, colOrder.size());
 
             // Execute the upsert with parameterized values (align params with column order)
             Object[] paramValues = colOrder.stream().map(rowValues::get).toArray();
             try {
-                jdbc.update(upsertSql, paramValues);
-            } catch (org.springframework.jdbc.BadSqlGrammarException badSql) {
-                String msg = badSql.getMessage();
-                // H2 reports: Column "X" not found
-                java.util.regex.Matcher m = java.util.regex.Pattern.compile("Column \"([^\"]+)\" not found").matcher(msg);
-                if (m.find()) {
-                    String missingCol = m.group(1);
-                    log.warn("upsertRowByMetadata: detected missing column {} on table {} — attempting ALTER TABLE to add it", missingCol, tableName);
-                    try {
-                        // Attempt to resolve case-insensitive key mapping
-                        String matchedKey = null;
-                        for (String k : rowValues.keySet()) { if (k.equalsIgnoreCase(missingCol)) { matchedKey = k; break; } }
-                        Object sample = matchedKey == null ? rowValues.get(missingCol) : rowValues.get(matchedKey);
-                        String colNameToAdd = matchedKey == null ? missingCol : matchedKey;
-                        String colType = determineColumnType(sample, null);
-                        String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, colNameToAdd, colType);
-                        executeDdlAutocommit(alter);
-                        // update cached columns
-                        Set<String> cur = getExistingColumns(tableName);
-                        cur.add(colNameToAdd.toUpperCase(java.util.Locale.ROOT));
-                        cachedTableColumns.put(tableName.toUpperCase(java.util.Locale.ROOT), cur);
-                        // retry once
-                        jdbc.update(upsertSql, paramValues);
-                        log.info("upsertRowByMetadata: successfully added missing column {} and retried insert", colNameToAdd);
-                    } catch (Exception ex2) {
-                        log.warn("upsertRowByMetadata: failed to add missing column {}: {}", missingCol, ex2.getMessage());
-                        // As a robust fallback for H2 where MERGE or complex upsert SQLs can be flaky
-                        if (isH2()) {
-                            try {
-                                log.info("upsertRowByMetadata: falling back to SELECT→UPDATE/INSERT for H2 on table {}", tableName);
-                                h2SelectUpdateInsert(tableName, colOrder, rowValues);
-                                return;
-                            } catch (Exception hx) {
-                                log.error("upsertRowByMetadata: H2 fallback failed: {}", hx.getMessage(), hx);
-                            }
-                        }
-                        throw badSql;
-                    }
+                // For H2, buildUpsertSql returns a special marker to indicate explicit select/update/insert should be used
+                if ("__H2_SELECT_UPDATE_INSERT__".equals(upsertSql) && isH2()) {
+                    System.out.println("SQL-INSTRUMENT: Routing to H2 fallback for table=" + actualTable + " params=" + java.util.Arrays.toString(paramValues));
+                    h2SelectUpdateInsert(actualTable, colOrder, rowValues);
                 } else {
-                    // Other SQL grammar errors: attempt H2 fallback if appropriate
-                    if (isH2()) {
-                        try { h2SelectUpdateInsert(tableName, colOrder, rowValues); return; } catch (Exception hx) { log.error("upsertRowByMetadata: H2 fallback failed: {}", hx.getMessage(), hx); }
-                    }
-                    throw badSql;
+                    System.out.println("SQL-INSTRUMENT: Executing upsert SQL: " + upsertSql + " params=" + java.util.Arrays.toString(paramValues));
+                    jdbc.update(upsertSql, paramValues);
                 }
+            } catch (org.springframework.jdbc.BadSqlGrammarException badSql) {
+                // Fallback for H2 where MERGE or complex upsert SQLs can be flaky
+                if (isH2()) {
+                    try {
+                        log.info("upsertRowByMetadata: falling back to SELECT→UPDATE/INSERT for H2 on table {}", actualTable);
+                        h2SelectUpdateInsert(actualTable, colOrder, rowValues);
+                        return;
+                    } catch (Exception hx) {
+                        log.error("upsertRowByMetadata: H2 fallback failed: {}", hx.getMessage(), hx);
+                    }
+                }
+                throw badSql;
             }
 
-            log.info("upsertRowByMetadata: successfully upserted {} rows into {}", 1, tableName);
+            log.info("upsertRowByMetadata: successfully upserted row into {}", actualTable);
         } catch (Exception ex) {
             log.error("upsertRowByMetadata: failed to upsert into table {}: {}", tableName, ex.getMessage(), ex);
         }
@@ -896,29 +886,6 @@ public class CaseDataWorker {
 
     /**
      * Batch-upserts multiple rows into an index table with type hints from the index definition.
-     *
-     * <p>For each row in the batch:
-     * <ol>
-     *   <li>Extract type hints from {@link vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition.IndexField} definitions (e.g., "BIGINT", "VARCHAR(100)")</li>
-     *   <li>Call {@link #ensureColumnsPresent(String, Map, Map)} to verify/create all columns with appropriate types</li>
-     *   <li>Build deterministic column ordering via {@link #upsertColumnOrder(Map)}</li>
-     *   <li>Execute parameterized INSERT/MERGE via {@link #buildUpsertSql(String, Map)}</li>
-     *   <li>On column-not-found errors (detected via regex), dynamically ALTER TABLE to add the missing column</li>
-     *   <li>Retry the upsert once after successful ALTER</li>
-     * </ol>
-     *
-     * <p>Type Hints Example:
-     * <pre>
-     * IndexField: plainColumn="item_price" type="DECIMAL(10,2)"
-     * Result: Column created as DECIMAL(10,2), not inferred from value type
-     * </pre>
-     *
-     * <p>Error Isolation: BadSqlGrammarException and other errors are caught and logged per row;
-     * processing continues for remaining rows.
-     *
-     * @param tableName the target index table name (must be valid SQL identifier)
-     * @param rows the batch of row maps to upsert (each map = column name to value)
-     * @param def the IndexDefinition containing type hints for field mappings; may be null
      */
     private void upsertRowsByMetadata(String tableName, java.util.List<Map<String, Object>> rows, vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition def) {
         if (rows == null || rows.isEmpty()) return;
@@ -932,56 +899,56 @@ public class CaseDataWorker {
                 }
             }
 
-            for (Map<String, Object> row : rows) {
-                ensureColumnsPresent(tableName, row, hints);
+            // Ensure table exists before processing rows
+            if (!tableExists(tableName)) {
+                log.info("upsertRowsByMetadata: table {} does not exist, creating with default schema", tableName);
+                createDefaultWorkTable(tableName, rows.get(0));
             }
 
-            // Simple batch execution: execute upsert per row in a loop (DB-specific batching can be optimized later)
+            String actualTable = resolveActualTableName(tableName);
+
             for (Map<String, Object> row : rows) {
-                // Build deterministic column order and parameter list for this row
+                ensureColumnsPresent(actualTable, row, hints);
+            }
+
+            // Simple batch execution: execute upsert per row in a loop
+            for (Map<String, Object> row : rows) {
                 java.util.List<String> columnOrder = upsertColumnOrder(row);
                 java.util.List<Object> paramsList = new java.util.ArrayList<>();
-                for (String col : columnOrder) paramsList.add(row.get(col));
+                for (String col : columnOrder) {
+                    Object val = row.get(col);
+                    if (isEmptyResult(val)) val = null;
+                    paramsList.add(val);
+                }
                 if (paramsList.isEmpty()) continue;
-                String upsertSql = buildUpsertSql(tableName, row);
+                String upsertSql = buildUpsertSql(actualTable, row);
                 Object[] params = paramsList.toArray();
                 try {
-                    jdbc.update(upsertSql, params);
-                } catch (org.springframework.jdbc.BadSqlGrammarException badSql) {
-                    String msg = badSql.getMessage();
-                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("Column \"([^\"]+)\" not found").matcher(msg);
-                    if (m.find()) {
-                        String missingCol = m.group(1);
-                        // Attempt to find case-insensitive key in row map
-                        String matchedKey = null;
-                        for (String k : row.keySet()) {
-                            if (k.equalsIgnoreCase(missingCol)) { matchedKey = k; break; }
-                        }
-                        Object sample = matchedKey == null ? null : row.get(matchedKey);
-                        String hint = matchedKey == null ? null : hints.get(matchedKey);
-                        String colType = determineColumnType(sample, hint);
-                        try {
-                            String alterStmt;
-                            alterStmt = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, (matchedKey == null ? missingCol : matchedKey), colType);
-                            executeDdlAutocommit(alterStmt);
-                            jdbc.update(upsertSql, params);
-                        } catch (Exception ex2) {
-                            log.error("upsertRowsByMetadata: failed to add missing column {}: {}", missingCol, ex2.getMessage(), ex2);
-                        }
+                    if ("__H2_SELECT_UPDATE_INSERT__".equals(upsertSql) && isH2()) {
+                        h2SelectUpdateInsert(actualTable, columnOrder, row);
                     } else {
-                        log.error("upsertRowsByMetadata: bad SQL grammar: {}", badSql.getMessage());
-                    }
+                        jdbc.update(upsertSql, params);
+                     }
+                 } catch (org.springframework.jdbc.BadSqlGrammarException badSql) {
+                    log.error("upsertRowsByMetadata: bad SQL grammar for table {}: {}", actualTable, badSql.getMessage());
                 }
             }
-            log.info("upsertRowsByMetadata: upserted {} rows into {}", rows.size(), tableName);
+            log.info("upsertRowsByMetadata: upserted {} rows into {}", rows.size(), actualTable);
         } catch (Exception ex) {
             log.error("upsertRowsByMetadata: failed for table {}: {}", tableName, ex.getMessage(), ex);
         }
     }
 
+    private String resolveActualTableName(String logicalName) {
+        if (logicalName == null) return null;
+        String up = logicalName.toUpperCase(java.util.Locale.ROOT);
+        String actual = logicalToActualTableNames.get(up);
+        return actual != null ? actual : logicalName;
+    }
+
     /**
      * Checks if a table exists in the database.
-     * Handles database-specific metadata queries gracefully.
+     * Handles database-specific metadata queries gracefully and is case-insensitive.
      */
     private boolean tableExists(String tableName) {
         if (tableName == null) return false;
@@ -1001,15 +968,27 @@ public class CaseDataWorker {
                     try {
                         conn = jdbc.getDataSource() == null ? null : jdbc.getDataSource().getConnection();
                         if (conn != null) {
+                            // Try exact match first
                             try (java.sql.ResultSet rs = conn.getMetaData().getTables(null, null, up, new String[]{"TABLE"})) {
-                                boolean exists = rs.next();
-                                log.debug("tableExists (meta): table {} exists = {}", tableName, exists);
-                                if (exists) {
-                                    // update cache lazily
+                                if (rs.next()) {
+                                    String found = rs.getString("TABLE_NAME");
+                                    logicalToActualTableNames.put(up, found);
                                     if (cachedExistingTables == null) cachedExistingTables = new java.util.HashSet<>();
                                     cachedExistingTables.add(up);
+                                    return true;
                                 }
-                                return exists;
+                            }
+                            // Fallback: search all tables case-insensitively (supports DATABASE_TO_LOWER=TRUE)
+                            try (java.sql.ResultSet rs = conn.getMetaData().getTables(null, null, null, new String[]{"TABLE"})) {
+                                while (rs.next()) {
+                                    String foundName = rs.getString("TABLE_NAME");
+                                    if (up.equalsIgnoreCase(foundName)) {
+                                        logicalToActualTableNames.put(up, foundName);
+                                        if (cachedExistingTables == null) cachedExistingTables = new java.util.HashSet<>();
+                                        cachedExistingTables.add(up);
+                                        return true;
+                                    }
+                                }
                             }
                         }
                     } finally {
@@ -1023,7 +1002,8 @@ public class CaseDataWorker {
         }
         // Fallback: lightweight query (non-throwing)
         try {
-            jdbc.queryForObject("SELECT 1 FROM " + tableName + " LIMIT 1", Integer.class);
+            // Use safeQuote table name for the fallback lightweight check
+            jdbc.queryForObject("SELECT 1 FROM " + safeQuote(tableName) + " LIMIT 1", Integer.class);
             log.debug("tableExists: table {} exists (via fallback)", tableName);
             if (cachedExistingTables == null) cachedExistingTables = new java.util.HashSet<>();
             cachedExistingTables.add(up);
@@ -1047,33 +1027,10 @@ public class CaseDataWorker {
 
     /**
      * Ensures all columns referenced in rowValues exist on the table; dynamically adds missing ones.
-     *
-     * <p>Algorithm:
-     * <ol>
-     *   <li>Query INFORMATION_SCHEMA.COLUMNS to get existing column names (case-insensitive via toUpperCase)</li>
-     *   <li>For each column in rowValues not in the existing set:
-     *       <ol>
-     *         <li>Skip reserved columns: {@code case_instance_id}, {@code id}</li>
-     *         <li>Validate identifier safety via {@link #isValidIdentifier(String)}</li>
-     *         <li>Determine SQL type via {@link #determineColumnType(Object, String)} using optional type hint</li>
-     *         <li>Execute {@code ALTER TABLE ADD COLUMN}</li>
-     *         <li>Add column to the existing set for subsequent checks</li>
-     *       </ol>
-     *   </li>
-     * </ol>
-     *
-     * <p>Type Hints: If a hint is provided for a column, it takes precedence over type inference from values.
-     * Example: hint "DECIMAL(10,2)" for a column "price" will create DECIMAL(10,2) instead of inferring from the numeric value.
-     *
-     * <p>Error Isolation: Failures to add individual columns are logged but do not halt processing.
-     *
-     * @param tableName the target table name
-     * @param rowValues the row map containing column names to check/create
-     * @param columnTypeHints optional map of column name to SQL type hint (e.g. "DECIMAL(10,2)", "BIGINT")
      */
-     private void ensureColumnsPresent(String tableName, Map<String, Object> rowValues, Map<String, String> columnTypeHints) {
+     private void ensureColumnsPresent(String actualTableName, Map<String, Object> rowValues, Map<String, String> columnTypeHints) {
         try {
-            Set<String> existing = getExistingColumns(tableName);
+            Set<String> existing = getExistingColumns(actualTableName);
             for (String col : rowValues.keySet()) {
                 if (col.equalsIgnoreCase("case_instance_id") || col.equalsIgnoreCase("id")) continue;
                 if (existing.contains(col.toUpperCase())) continue;
@@ -1083,28 +1040,25 @@ public class CaseDataWorker {
                 }
                 String hint = columnTypeHints == null ? null : columnTypeHints.get(col);
                 String colType = determineColumnType(rowValues.get(col), hint);
-                String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", tableName, col, colType);
+                String alter = String.format("ALTER TABLE %s ADD COLUMN %s %s", safeQuote(actualTableName), safeQuote(col), colType);
                 try {
                     executeDdlAutocommit(alter);
-                    log.info("ensureColumnsPresent: added missing column {} to {}", col, tableName);
+                    log.info("ensureColumnsPresent: added missing column {} to {}", col, actualTableName);
                     existing.add(col.toUpperCase());
                 } catch (Exception ex) {
-                    // If another thread created the column concurrently, that's fine — refresh cache and continue
-                    log.debug("ensureColumnsPresent: failed to add column {} to {}: {} (will refresh cache)", col, tableName, ex.getMessage());
-                    // Refresh cached columns to avoid repeated ALTER attempts
-                    try { cachedTableColumns.remove(tableName.toUpperCase(java.util.Locale.ROOT)); getExistingColumns(tableName); } catch (Exception ignored) {}
+                    log.debug("ensureColumnsPresent: failed to add column {} to {}: {}", col, actualTableName, ex.getMessage());
                 }
             }
         } catch (Exception ex) {
-            log.debug("ensureColumnsPresent: error checking/adding columns for {}: {}", tableName, ex.getMessage());
+            log.debug("ensureColumnsPresent: error checking/adding columns for {}: {}", actualTableName, ex.getMessage());
         }
     }
 
-    private Set<String> getExistingColumns(String tableName) {
-        if (tableName == null) return java.util.Collections.emptySet();
-        String up = tableName.toUpperCase(java.util.Locale.ROOT);
+    private Set<String> getExistingColumns(String actualTableName) {
+        if (actualTableName == null) return java.util.Collections.emptySet();
+        String upLogical = actualTableName.toUpperCase(java.util.Locale.ROOT);
         // Check cache
-        Set<String> cached = cachedTableColumns.get(up);
+        Set<String> cached = cachedTableColumns.get(upLogical);
         if (cached != null) return cached;
 
         Set<String> cols = new HashSet<>();
@@ -1114,14 +1068,22 @@ public class CaseDataWorker {
             if (conn != null) {
                 java.sql.ResultSet rs = null;
                 try {
-                    // Use JDBC metadata which is more portable than querying INFORMATION_SCHEMA directly
-                    rs = conn.getMetaData().getColumns(null, null, up, null);
+                    rs = conn.getMetaData().getColumns(null, null, actualTableName, null);
                     while (rs.next()) {
                         String col = rs.getString("COLUMN_NAME");
                         if (col != null) cols.add(col.toUpperCase(java.util.Locale.ROOT));
                     }
+                    if (cols.isEmpty()) {
+                        // Fallback: try uppercase version if actualTableName didn't work (some drivers are picky)
+                        rs.close();
+                        rs = conn.getMetaData().getColumns(null, null, actualTableName.toUpperCase(java.util.Locale.ROOT), null);
+                        while (rs.next()) {
+                            String col = rs.getString("COLUMN_NAME");
+                            if (col != null) cols.add(col.toUpperCase(java.util.Locale.ROOT));
+                        }
+                    }
                     if (!cols.isEmpty()) {
-                        cachedTableColumns.put(up, cols);
+                        cachedTableColumns.put(upLogical, cols);
                         return cols;
                     }
                 } finally {
@@ -1129,30 +1091,15 @@ public class CaseDataWorker {
                 }
             }
         } catch (Exception ex) {
-            log.debug("getExistingColumns: metadata fallback failed for {}: {}", tableName, ex.getMessage());
+            log.debug("getExistingColumns: metadata fallback failed for {}: {}", actualTableName, ex.getMessage());
         } finally {
             if (conn != null) try { conn.close(); } catch (Exception ignored) {}
-        }
-
-        // Second attempt: query INFORMATION_SCHEMA (some in-memory DBs require this)
-        try {
-            List<Map<String, Object>> rows = jdbc.queryForList("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ?", up);
-            for (Map<String, Object> r : rows) {
-                Object val = r.get("COLUMN_NAME");
-                if (val != null) cols.add(val.toString().toUpperCase(java.util.Locale.ROOT));
-            }
-            cachedTableColumns.put(up, cols);
-        } catch (Exception ex) {
-            log.debug("getExistingColumns: INFORMATION_SCHEMA query failed for {}: {}", tableName, ex.getMessage());
         }
         return cols;
     }
 
     /**
-     * Execute DDL statements (CREATE/ALTER/INDEX) on a dedicated autocommit connection to avoid
-     * transactional visibility and H2/Multi-connection race conditions during tests.
-     *
-     * @param sql the DDL statement to execute
+     * Execute DDL statements (CREATE/ALTER/INDEX) on a dedicated autocommit connection.
      */
     private void executeDdlAutocommit(String sql) {
         if (sql == null || sql.isBlank()) return;
@@ -1167,19 +1114,15 @@ public class CaseDataWorker {
                 conn.setAutoCommit(true);
                 st = conn.createStatement();
                 st.execute(sql);
-                try { conn.commit(); } catch (Exception ignored) {}
             } finally {
                 if (st != null) try { st.close(); } catch (Exception ignored) {}
                 try { conn.setAutoCommit(prevAuto); } catch (Exception ignored) {}
             }
         } catch (Exception ex) {
             String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase(java.util.Locale.ROOT);
-            // Treat common benign DDL races as non-fatal: table/index/column already exists
-            if (msg.contains("already exists") || msg.contains("already an index") || msg.contains("column already exists") || msg.contains("duplicate key name") || msg.contains("duplicate table")) {
-                log.debug("executeDdlAutocommit: benign DDL race for '{}': {}", sql, ex.getMessage());
+            if (msg.contains("already exists") || msg.contains("column already exists") || msg.contains("duplicate table")) {
                 return;
             }
-            log.debug("executeDdlAutocommit: failed to execute DDL '{}' : {}", sql, ex.getMessage());
             throw new RuntimeException(ex);
         } finally {
             if (conn != null) try { conn.close(); } catch (Exception ignored) {}
@@ -1188,104 +1131,51 @@ public class CaseDataWorker {
 
     /**
      * Creates a default work table with standard columns and indexes.
-     *
-     * <p>Schema:
-     * <ul>
-     *   <li>{@code id} (VARCHAR(255) PRIMARY KEY) - string primary key to support caller-supplied identifiers</li>
-     *   <li>{@code case_instance_id} (VARCHAR(255) UNIQUE NOT NULL) - foreign key to the source case</li>
-     *   <li>{@code plain_payload} (LONGTEXT) - full JSON representation of the row for audit/debugging</li>
-     *   <li>{@code requested_by} (VARCHAR(255)) - audit field</li>
-     *   <li>Dynamic columns from rowValues - created via {@link #ensureColumnsPresent(String, Map, Map)}</li>
-     *   <li>{@code created_at} (TIMESTAMP DEFAULT CURRENT_TIMESTAMP) - creation timestamp</li>
-     *   <li>{@code updated_at} (TIMESTAMP DEFAULT CURRENT_TIMESTAMP) - last update timestamp</li>
-     * </ul>
-     *
-     * <p>Concurrency Safety:
-     * <ul>
-     *   <li>Uses {@code synchronized(tableName.intern())} to prevent concurrent CREATE TABLE storms</li>
-     *   <li>Checks {@link #tableExists(String)} early and returns if table already created by another thread</li>
-     *   <li>Catches and logs {@code BadSqlGrammarException} to handle benign race conditions</li>
-     * </ul>
-     *
-     * <p>Index Creation:
-     * <ul>
-     *   <li>Creates indexes on {@code case_instance_id} and {@code created_at} for query performance</li>
-     *   <li>Uses {@code IF NOT EXISTS} syntax for cross-DB compatibility; falls back to plain CREATE INDEX on error</li>
-     * </ul>
-     *
-     * @param tableName the name of the table to create (must be valid SQL identifier)
-     * @param rowValues the initial row values; used to infer dynamic column types via {@link #determineColumnType(Object, String)}
-     * @throws RuntimeException if table creation fails after retries
      */
     private void createDefaultWorkTable(String tableName, Map<String, Object> rowValues) {
         try {
-            // Validate table name
             if (!isValidIdentifier(tableName)) {
                 log.error("createDefaultWorkTable: invalid table name: {}", tableName);
                 return;
             }
 
-            // Prevent concurrent table creation for the same table which can exhaust connections
             synchronized (tableName.intern()) {
-                if (tableExists(tableName)) {
-                    log.debug("createDefaultWorkTable: table {} already exists (created by concurrent thread)", tableName);
-                    return;
-                }
+                if (tableExists(tableName)) return;
 
-                // Use a string primary key for id to accept caller-provided identifiers (safer for mixed test scenarios)
-                String idColumnDef = "id VARCHAR(255) PRIMARY KEY";
+                String idColumnDef = isH2() 
+                    ? "id VARCHAR(255) DEFAULT RANDOM_UUID() PRIMARY KEY" 
+                    : "id VARCHAR(255) PRIMARY KEY";
 
-                // Build CREATE TABLE statement using normalized (uppercase) table name
-                String upName = tableName == null ? null : tableName.toUpperCase(java.util.Locale.ROOT);
                 StringBuilder createTableSql = new StringBuilder();
-                createTableSql.append("CREATE TABLE ").append(upName).append(" (");
+                createTableSql.append("CREATE TABLE ").append(safeQuote(tableName)).append(" (");
                 createTableSql.append(idColumnDef).append(", ");
                 createTableSql.append("case_instance_id VARCHAR(255) NOT NULL UNIQUE, ");
 
-                // Add standard work columns
                 String payloadType = isH2() ? "CLOB" : "LONGTEXT";
                 createTableSql.append("plain_payload ").append(payloadType).append(", ");
                 createTableSql.append("requested_by VARCHAR(255)");
-
-                // Add timestamp columns (avoid ON UPDATE for H2 compatibility)
                 createTableSql.append(", created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
                 createTableSql.append(", updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
-
-                // Finish CREATE TABLE (indexes created separately for better cross-DB compatibility)
                 createTableSql.append(")");
 
-                log.debug("createDefaultWorkTable: executing CREATE TABLE SQL: {}", createTableSql);
                 try {
                     executeDdlAutocommit(createTableSql.toString());
-                } catch (org.springframework.jdbc.BadSqlGrammarException e) {
-                    // Table may have been created concurrently by another thread/process; treat as benign.
-                    log.debug("createDefaultWorkTable: CREATE TABLE failed (table may already exist) - ignoring: {}", e.getMessage());
+                } catch (Exception e) {
+                    log.debug("createDefaultWorkTable: CREATE TABLE failed (benign race?) - ignoring: {}", e.getMessage());
                 }
 
-                // Now ensure any dynamic columns are added
-                ensureColumnsPresent(tableName, rowValues);
+                String actualTable = resolveActualTableName(tableName);
+                ensureColumnsPresent(actualTable, rowValues, null);
 
-                // Create indexes separately to avoid dialect-specific CREATE TABLE index syntax
                 try {
-                    String idx1 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_case_instance_id ON %s(case_instance_id)", upName, upName);
-                    String idx2 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at)", upName, upName);
-                    try { executeDdlAutocommit(idx1); } catch (Exception ignored) {}
-                    try { executeDdlAutocommit(idx2); } catch (Exception ignored) {}
-                } catch (Exception exIdx) {
-                    // Some DBs may not support IF NOT EXISTS for CREATE INDEX; fall back to plain CREATE INDEX
-                    try {
-                        jdbc.execute(String.format("CREATE INDEX idx_%s_case_instance_id ON %s(case_instance_id)", upName, upName));
-                    } catch (Exception ignored) {}
-                    try {
-                        jdbc.execute(String.format("CREATE INDEX idx_%s_created_at ON %s(created_at)", upName, upName));
-                    } catch (Exception ignored) {}
-                }
-
-                log.info("createDefaultWorkTable: successfully created table {} with default schema", upName);
+                    String idx1 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_case_instance_id ON %s(case_instance_id)", tableName, safeQuote(actualTable));
+                    String idx2 = String.format("CREATE INDEX IF NOT EXISTS idx_%s_created_at ON %s(created_at)", tableName, safeQuote(actualTable));
+                    executeDdlAutocommit(idx1);
+                    executeDdlAutocommit(idx2);
+                 } catch (Exception ignored) {}
             }
         } catch (Exception ex) {
             log.error("createDefaultWorkTable: failed to create table {}: {}", tableName, ex.getMessage(), ex);
-            throw new RuntimeException("Failed to create work table: " + tableName, ex);
         }
     }
 
@@ -1397,32 +1287,11 @@ public class CaseDataWorker {
 
     /**
      * Builds a dynamic UPSERT SQL statement based on the provided table name and column order.
-     *
-     * <p>Database Compatibility:
-     * <ul>
-     *   <li>For H2: Uses MERGE with ON DUPLICATE KEY UPDATE (H2 1.4.200+) or INSERT with UPDATE clause</li>
-     *   <li>For MySQL/MariaDB: Uses INSERT ... ON DUPLICATE KEY UPDATE</li>
-     *   <li>For PostgreSQL/others: Uses MERGE syntax</li>
-     *   <li>Fallback: Simple INSERT if UPSERT format unknown</li>
-     * </ul>
-     *
-     * <p>Upsert Semantics:
-     * <ul>
-     *   <li>CRITICAL: case_instance_id has UNIQUE constraint and must be the merge/conflict key</li>
-     *   <li>Updates all columns on conflict to ensure idempotency</li>
-     *   <li>Parameter placeholders (?) are generated in the same order as columnOrder</li>
-     * </ul>
-     *
-     * @param tableName the target table name
-     * @param columnOrder list of column names in the exact order of the parameter array to follow
-     * @return a parameterized SQL string with ? placeholders ready for {@link JdbcTemplate#update(String, Object[])}
-     * @throws IllegalArgumentException if columnOrder is null or empty
      */
-    private String buildUpsertSql(String tableName, java.util.List<String> columnOrder) {
+    private String buildUpsertSql(String actualTableName, java.util.List<String> columnOrder) {
         if (columnOrder == null || columnOrder.isEmpty()) throw new IllegalArgumentException("No columns to upsert");
         java.util.List<String> placeholders = new java.util.ArrayList<>();
         for (int i = 0; i < columnOrder.size(); i++) placeholders.add("?");
-        String columns = String.join(", ", columnOrder);
         String values = String.join(", ", placeholders);
 
         // Identify key column and build update assignments
@@ -1434,12 +1303,12 @@ public class CaseDataWorker {
                 continue;
             }
             if (updateAssignments.length() > 0) updateAssignments.append(", ");
-            updateAssignments.append(col).append("=src.").append(col);
+            updateAssignments.append(safeQuote(col)).append("=src.").append(safeQuote(col));
         }
 
         if (keyCol == null) {
-            log.warn("buildUpsertSql: case_instance_id not in columnOrder; falling back to INSERT (will cause duplicates on retry)");
-            return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
+            String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+            return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
         }
 
         try {
@@ -1447,122 +1316,76 @@ public class CaseDataWorker {
             try { db = jdbc.getDataSource() == null ? "" : jdbc.getDataSource().getConnection().getMetaData().getDatabaseProductName(); } catch (Exception ignored) {}
             String dbLower = db == null ? "" : db.toLowerCase(java.util.Locale.ROOT);
 
-            // For H2 and other ANSI-supporting DBs prefer ANSI MERGE USING VALUES
             if (dbLower.contains("h2")) {
-                // Use H2's simpler MERGE ... KEY(...) VALUES(...) syntax which is reliable across H2 2.x
-                return String.format("MERGE INTO %s (%s) KEY(case_instance_id) VALUES (%s)", tableName, columns, values);
+                return "__H2_SELECT_UPDATE_INSERT__";
             } else if (dbLower.contains("postgres") || dbLower.contains("oracle") || dbLower.contains("sqlserver")) {
-                StringBuilder srcCols = new StringBuilder();
-                for (int i = 0; i < columnOrder.size(); i++) {
-                    if (i > 0) srcCols.append(", ");
-                    srcCols.append(columnOrder.get(i));
-                }
-                StringBuilder insertCols = new StringBuilder();
-                StringBuilder insertVals = new StringBuilder();
-                for (int i = 0; i < columnOrder.size(); i++) {
-                    if (i > 0) { insertCols.append(", "); insertVals.append(", "); }
-                    insertCols.append(columnOrder.get(i));
-                    insertVals.append("src.").append(columnOrder.get(i));
-                }
-                String updateClause = updateAssignments.length() == 0 ? null : updateAssignments.toString();
+                String[] srcColsArr = columnOrder.stream().map(this::safeQuote).toArray(String[]::new);
+                String srcCols = String.join(", ", srcColsArr);
+                String insertVals = java.util.stream.IntStream.range(0, columnOrder.size()).mapToObj(i -> "src." + safeQuote(columnOrder.get(i))).collect(java.util.stream.Collectors.joining(", "));
                 StringBuilder merge = new StringBuilder();
-                merge.append("MERGE INTO ").append(tableName).append(" AS t USING (VALUES (").append(values).append(")) AS src(").append(srcCols.toString()).append(") ON t.").append(keyCol).append(" = src.").append(keyCol).append(" ");
-                if (updateClause != null) {
-                    merge.append("WHEN MATCHED THEN UPDATE SET ").append(updateClause).append(" ");
-                }
-                merge.append("WHEN NOT MATCHED THEN INSERT (").append(insertCols.toString()).append(") VALUES (").append(insertVals.toString()).append(")");
+                merge.append("MERGE INTO ").append(safeQuote(actualTableName)).append(" AS t USING (VALUES (").append(values).append(")) AS src(").append(srcCols).append(") ON t.").append(safeQuote(keyCol)).append(" = src.").append(safeQuote(keyCol)).append(" ");
+                if (updateAssignments.length() > 0) merge.append("WHEN MATCHED THEN UPDATE SET ").append(updateAssignments.toString()).append(" ");
+                merge.append("WHEN NOT MATCHED THEN INSERT (").append(srcCols).append(") VALUES (").append(insertVals).append(")");
                 return merge.toString();
             } else if (dbLower.contains("mysql") || dbLower.contains("mariadb")) {
-                // MySQL/MariaDB: INSERT ... ON DUPLICATE KEY UPDATE
-                if (updateAssignments.length() > 0) {
-                    StringBuilder updateClauseMysql = new StringBuilder();
-                    for (String col : columnOrder) {
-                        if (col.equalsIgnoreCase("case_instance_id")) continue;
-                        if (updateClauseMysql.length() > 0) updateClauseMysql.append(", ");
-                        updateClauseMysql.append(col).append("=VALUES(").append(col).append(")");
-                    }
-                    return String.format("INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s", tableName, columns, values, updateClauseMysql.toString());
+                String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+                StringBuilder updateClauseMysql = new StringBuilder();
+                for (String col : columnOrder) {
+                    if (col.equalsIgnoreCase("case_instance_id")) continue;
+                    if (updateClauseMysql.length() > 0) updateClauseMysql.append(", ");
+                    updateClauseMysql.append(safeQuote(col)).append("=VALUES(").append(safeQuote(col)).append(")");
                 }
+                return String.format("INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s", safeQuote(actualTableName), colsQuoted, values, updateClauseMysql.toString());
             }
-
-            // Fallback to INSERT (no upsert semantics)
-            return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
+            String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+            return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
         } catch (Exception ignored) {
-            log.warn("buildUpsertSql: failed to detect database, defaulting to INSERT");
-            return String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, values);
+            String colsQuoted = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
+            return String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTableName), colsQuoted, values);
         }
     }
 
     /**
      * H2-specific robust fallback: perform a SELECT to check existence then UPDATE or INSERT atomically
-     * Relies on outer @Transactional in reindexByCaseInstanceId for transactional safety.
      */
-    private void h2SelectUpdateInsert(String tableName, java.util.List<String> columnOrder, Map<String, Object> rowValues) {
-        if (tableName == null || tableName.trim().isEmpty() || columnOrder == null || columnOrder.isEmpty()) return;
-        // Normalize table name to uppercase for H2 visibility
-        String upTable = tableName.toUpperCase(java.util.Locale.ROOT);
+    private void h2SelectUpdateInsert(String actualTable, java.util.List<String> columnOrder, Map<String, Object> rowValues) {
+        if (actualTable == null || actualTable.trim().isEmpty() || columnOrder == null || columnOrder.isEmpty()) return;
         try {
-            // If no case_instance_id present we cannot perform key-based upsert; attempt plain INSERT
             Object keyVal = rowValues.get("case_instance_id");
-            // Normalize column names to actual used names (preserve case in params)
-            java.util.List<String> normalizedCols = new java.util.ArrayList<>();
-            for (String c : columnOrder) normalizedCols.add(c);
-
-            String placeholders = String.join(", ", java.util.Collections.nCopies(normalizedCols.size(), "?"));
-            String columns = String.join(", ", normalizedCols);
-            Object[] insertParams = normalizedCols.stream().map(rowValues::get).toArray();
+            String placeholders = String.join(", ", java.util.Collections.nCopies(columnOrder.size(), "?"));
+            Object[] insertParams = columnOrder.stream().map(rowValues::get).toArray();
+            String safeCols = String.join(", ", columnOrder.stream().map(this::safeQuote).toArray(String[]::new));
 
             if (keyVal == null) {
-                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", upTable, columns, placeholders);
-                jdbc.update(insertSql, insertParams);
+                jdbc.update(String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTable), safeCols, placeholders), insertParams);
                 return;
             }
 
-            // Small retry loop to tolerate visibility delays after DDL in different connections
-            int attempts = 3;
             Integer count = null;
-            for (int attempt = 1; attempt <= attempts; attempt++) {
-                try {
-                    count = jdbc.queryForObject(String.format("SELECT COUNT(1) FROM %s WHERE case_instance_id = ?", upTable), new Object[]{keyVal}, Integer.class);
-                    break;
-                } catch (Exception ex) {
-                    log.debug("h2SelectUpdateInsert: existence check attempt {} failed for table {}: {}", attempt, upTable, ex.getMessage());
-                    try { Thread.sleep(50L * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-                    count = null;
-                }
-            }
-
-            if (count == null) {
-                // Fall back to insert if we could not query
-                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", upTable, columns, placeholders);
-                jdbc.update(insertSql, insertParams);
-                return;
+            try {
+                String existsSql = String.format("SELECT COUNT(1) FROM %s WHERE %s = ?", safeQuote(actualTable), safeQuote("case_instance_id"));
+                count = jdbc.queryForObject(existsSql, new Object[]{keyVal}, Integer.class);
+            } catch (Exception ex) {
+                log.debug("h2SelectUpdateInsert: existence check failed for {}: {}", actualTable, ex.getMessage());
             }
 
             if (count != null && count > 0) {
-                // Build UPDATE statement for non-key columns
                 StringBuilder set = new StringBuilder();
                 java.util.List<Object> params = new java.util.ArrayList<>();
-                for (String col : normalizedCols) {
+                for (String col : columnOrder) {
                     if (col.equalsIgnoreCase("case_instance_id")) continue;
                     if (set.length() > 0) set.append(", ");
-                    set.append(col).append(" = ?");
+                    set.append(safeQuote(col)).append(" = ?");
                     params.add(rowValues.get(col));
                 }
-                // No non-key columns to update: nothing to do
-                if (params.isEmpty()) {
-                    log.debug("h2SelectUpdateInsert: nothing to update for table {} and key {}", upTable, keyVal);
-                    return;
-                }
+                if (params.isEmpty()) return;
                 params.add(keyVal);
-                String updateSql = String.format("UPDATE %s SET %s WHERE case_instance_id = ?", upTable, set.toString());
-                jdbc.update(updateSql, params.toArray());
+                jdbc.update(String.format("UPDATE %s SET %s WHERE %s = ?", safeQuote(actualTable), set.toString(), safeQuote("case_instance_id")), params.toArray());
             } else {
-                String insertSql = String.format("INSERT INTO %s (%s) VALUES (%s)", upTable, columns, placeholders);
-                jdbc.update(insertSql, insertParams);
+                jdbc.update(String.format("INSERT INTO %s (%s) VALUES (%s)", safeQuote(actualTable), safeCols, placeholders), insertParams);
             }
         } catch (Exception ex) {
-            log.error("h2SelectUpdateInsert: failed for table {}: {}", upTable, ex.getMessage(), ex);
+            log.error("h2SelectUpdateInsert failed for table {}: {}", actualTable, ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
     }
@@ -1602,6 +1425,20 @@ public class CaseDataWorker {
         if (identifier == null || identifier.trim().isEmpty()) return false;
         // Allow alphanumeric, underscore, and dollar sign (common DB naming conventions)
         return identifier.matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$");
+    }
+
+    private boolean isEmptyResult(Object val) {
+        if (val == null) return true;
+        if (val instanceof java.util.Collection && ((java.util.Collection<?>) val).isEmpty()) return true;
+        if (val instanceof java.util.Map && ((java.util.Map<?, ?>) val).isEmpty()) return true;
+        String s = val.toString().trim();
+        return s.equals("[]") || s.equals("{}");
+    }
+
+    private String safeQuote(String id) {
+        if (id == null) return "";
+        if (isValidIdentifier(id)) return id;
+        return "\"" + id + "\"";
     }
 
     /**
