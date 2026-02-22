@@ -9,6 +9,8 @@ ext {
     flowableVersion = '7.2.0'
     junitVersion = '5.10.0'
     h2Version = '2.4.240'
+    // Mockito agent version used for attaching as a Java agent during tests
+    mockitoVersion = '5.5.1'
 }
 
 java {
@@ -46,6 +48,20 @@ subprojects {
     // Define the H2 version property for Spring Boot plugin / dependency management
     ext['h2.version'] = h2Version
 
+    // Provide a configuration that will be used to fetch the Mockito runtime JAR
+    // which will be passed to the test JVM as a -javaagent to avoid self-attach.
+    configurations {
+        mockitoAgent
+        byteBuddyAgent
+    }
+
+    dependencies {
+        // Add mockito-core to the mockitoAgent configuration so we can point -javaagent to it.
+        mockitoAgent "org.mockito:mockito-core:${mockitoVersion}"
+        // Byte Buddy agent used by Mockito for inline mocking — attach as a javaagent to avoid dynamic attach
+        byteBuddyAgent 'net.bytebuddy:byte-buddy-agent:1.17.8'
+    }
+
     // Ensure subprojects can resolve artifacts from Maven Central explicitly
     repositories {
         mavenCentral()
@@ -76,6 +92,42 @@ subprojects {
     java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
     test {
         useJUnitPlatform()
+    }
+
+    // Attach Mockito as a Java agent for tests to avoid runtime self-attach warnings
+    tasks.withType(Test).configureEach {
+        // Resolve the mockitoAgent configuration at test execution time and attach the JAR
+        doFirst {
+            try {
+                def added = []
+                try {
+                    def agentJar = configurations.mockitoAgent.resolve().find { it.name.contains('mockito-core') }
+                    if (agentJar != null) {
+                        jvmArgs = (jvmArgs ?: []) + ["-javaagent:${agentJar.absolutePath}"]
+                        logger.lifecycle("Added Mockito javaagent for tests: ${agentJar.absolutePath}")
+                        added << agentJar.absolutePath
+                    }
+                } catch (Exception ignored) {
+                    logger.debug('mockitoAgent resolution failed: ' + ignored.message)
+                }
+                try {
+                    def bb = configurations.byteBuddyAgent.resolve().find { it.name.contains('byte-buddy-agent') }
+                    if (bb != null) {
+                        // Only add if not already added
+                        if (!added.contains(bb.absolutePath)) {
+                            jvmArgs = (jvmArgs ?: []) + ["-javaagent:${bb.absolutePath}"]
+                            logger.lifecycle("Added ByteBuddy javaagent for tests: ${bb.absolutePath}")
+                        }
+                    }
+                } catch (Exception ignored) {
+                    logger.debug('byteBuddyAgent resolution failed: ' + ignored.message)
+                }
+            } catch (Exception e) {
+                // If resolution fails, continue without failing the configuration step — tests will still run,
+                // but Mockito will warn at runtime. We log the problem to help diagnostics.
+                logger.warn('Failed to resolve javaagent configurations for tests: ' + e.message)
+            }
+        }
     }
 
     // Configure Checkstyle reports

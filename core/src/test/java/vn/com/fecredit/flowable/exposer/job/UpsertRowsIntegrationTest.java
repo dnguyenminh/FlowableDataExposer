@@ -22,12 +22,11 @@ class UpsertRowsIntegrationTest {
         ds.setPassword("");
 
         JdbcTemplate jdbc = new JdbcTemplate(ds);
-        CaseDataWorker worker = new CaseDataWorker();
-
-        // inject jdbc into private field
-        java.lang.reflect.Field f = CaseDataWorker.class.getDeclaredField("jdbc");
+        // create service with minimal dependencies (resolver/om/annotator/indexLoader not needed for these helpers)
+        CaseDataWorkerService svc = new CaseDataWorkerService(jdbc, null, null, null, null);
+        java.lang.reflect.Field f = CaseDataWorkerService.class.getDeclaredField("db");
         f.setAccessible(true);
-        f.set(worker, jdbc);
+        Object dbHelper = f.get(svc);
 
         // build two sample rows
         Map<String, Object> r1 = new HashMap<>();
@@ -42,13 +41,13 @@ class UpsertRowsIntegrationTest {
 
         // call private method via reflection
         // ensure table is created first (createDefaultWorkTable is private)
-        java.lang.reflect.Method create = CaseDataWorker.class.getDeclaredMethod("createDefaultWorkTable", String.class, java.util.Map.class);
+        java.lang.reflect.Method create = dbHelper.getClass().getDeclaredMethod("createDefaultWorkTable", String.class, java.util.Map.class);
         create.setAccessible(true);
-        create.invoke(worker, "item_index", r1);
+        create.invoke(dbHelper, "item_index", r1);
 
-        java.lang.reflect.Method upsert = CaseDataWorker.class.getDeclaredMethod("upsertRowsByMetadata", String.class, java.util.List.class, vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition.class);
+        java.lang.reflect.Method upsert = dbHelper.getClass().getDeclaredMethod("upsertRowsByMetadata", String.class, java.util.List.class, vn.com.fecredit.flowable.exposer.service.metadata.IndexDefinition.class);
         upsert.setAccessible(true);
-        upsert.invoke(worker, "item_index", List.of(r1, r2), null);
+        upsert.invoke(dbHelper, "item_index", List.of(r1, r2), null);
 
         // verify table exists and rows inserted
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM item_index", Integer.class);
@@ -69,17 +68,17 @@ class UpsertRowsIntegrationTest {
         ds.setPassword("");
 
         JdbcTemplate jdbc = new JdbcTemplate(ds);
-        CaseDataWorker worker = new CaseDataWorker();
-        java.lang.reflect.Field f = CaseDataWorker.class.getDeclaredField("jdbc");
+        CaseDataWorkerService svc = new CaseDataWorkerService(jdbc, null, null, null, null);
+        java.lang.reflect.Field f = CaseDataWorkerService.class.getDeclaredField("db");
         f.setAccessible(true);
-        f.set(worker, jdbc);
+        Object dbHelper = f.get(svc);
 
         Map<String, Object> row = new HashMap<>();
         row.put("case_instance_id", "C1");
 
-        java.lang.reflect.Method create = CaseDataWorker.class.getDeclaredMethod("createDefaultWorkTable", String.class, java.util.Map.class);
+        java.lang.reflect.Method create = dbHelper.getClass().getDeclaredMethod("createDefaultWorkTable", String.class, java.util.Map.class);
         create.setAccessible(true);
-        create.invoke(worker, "sample_table", row);
+        create.invoke(dbHelper, "sample_table", row);
 
         // verify metadata from H2 shows uppercase names
         java.sql.Connection conn = ds.getConnection();

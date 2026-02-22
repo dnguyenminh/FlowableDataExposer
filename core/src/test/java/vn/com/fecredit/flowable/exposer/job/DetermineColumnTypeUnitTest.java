@@ -23,11 +23,22 @@ class DetermineColumnTypeUnitTest {
         String r3 = (String) m.invoke(w, null, "timestamp");
         assertThat(r3).isEqualToIgnoringCase("TIMESTAMP");
 
-        String r4 = (String) m.invoke(w, null, "text");
+        String r4 = (String) m.invoke(w, null, "TeXt");
         assertThat(r4).isEqualToIgnoringCase("LONGTEXT");
 
+        // explicit size hints should be returned exactly as given
         String r5 = (String) m.invoke(w, null, "VARCHAR(100)");
         assertThat(r5).isEqualTo("VARCHAR(100)");
+
+        // also verify H2-specific mapping when the stub is overridden
+        CaseDataWorker h2worker = new CaseDataWorker() {
+            @Override
+            boolean isH2() { return true; }
+        };
+        Method m2 = CaseDataWorker.class.getDeclaredMethod("determineColumnType", Object.class, String.class);
+        m2.setAccessible(true);
+        String r6 = (String) m2.invoke(h2worker, null, "text");
+        assertThat(r6).isEqualToIgnoringCase("CLOB");
     }
 
     @Test

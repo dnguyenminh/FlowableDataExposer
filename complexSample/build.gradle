@@ -60,6 +60,13 @@ sourceSets {
   }
 }
 
+tasks.withType(Test) {
+    testLogging {
+        showStandardStreams = true
+        exceptionFormat = 'full'
+    }
+}
+
 // During the ongoing repo migration there may be legitimate duplicates between
 // web/src/main/resources and the canonical repo resources. Prefer the web/
 // copy and avoid failing the build on duplicates until the cleanup PR is
