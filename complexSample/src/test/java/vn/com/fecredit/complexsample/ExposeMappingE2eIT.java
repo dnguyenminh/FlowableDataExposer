@@ -108,6 +108,54 @@ public class ExposeMappingE2eIT {
         verifyPlainTableForCase(caseInstanceId, TOTAL, CUSTOMER_ID);
     }
 
+    @Test
+    void orderApiEndpointsAndStepsWork() throws Exception {
+        // start process and force synchronous reindex as usual
+        Map<String, Object> req = Map.of("orderId", ORDER_ID, "customer", Map.of("id", CUSTOMER_ID), "total", TOTAL);
+        String body = toJson(req);
+        String caseInstanceId = startOrderProcess(body);
+
+        Awaitility.await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(200))
+                .until(() -> {
+                    try {
+                        Integer cnt = jdbc.queryForObject(
+                                "SELECT count(*) FROM sys_case_data_store WHERE case_instance_id = ?", Integer.class,
+                                caseInstanceId);
+                        return cnt != null && cnt > 0;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+        CaseDataWorker worker = ctx.getBean(CaseDataWorker.class);
+        worker.reindexByCaseInstanceId(caseInstanceId);
+        Awaitility.await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(250))
+                .until(() -> {
+                    try {
+                        Integer cnt = jdbc.queryForObject(
+                                "SELECT count(*) FROM case_plain_order WHERE case_instance_id = ?", Integer.class,
+                                caseInstanceId);
+                        return cnt != null && cnt > 0;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                });
+
+        // verify GET single
+        ResponseEntity<Map> single = rest.getForEntity("http://localhost:" + port + "/api/orders/" + caseInstanceId, Map.class);
+        assertThat(single.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(single.getBody()).containsEntry("orderTotal", TOTAL).containsEntry("customerId", CUSTOMER_ID);
+
+        // verify list filtering
+        ResponseEntity<java.util.List> listResp = rest.getForEntity("http://localhost:" + port + "/api/orders?customerId=" + CUSTOMER_ID, java.util.List.class);
+        assertThat(listResp.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(listResp.getBody()).isNotNull().isNotEmpty();
+
+        // verify steps endpoint returns a list (possibly empty)
+        ResponseEntity<java.util.List> steps = rest.getForEntity("http://localhost:" + port + "/api/orders/" + caseInstanceId + "/steps", java.util.List.class);
+        assertThat(steps.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(steps.getBody()).isInstanceOf(java.util.List.class);
+    }
+
     String startOrderProcess(String body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
