@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import vn.com.fecredit.complexsample.entity.CasePlainOrder;
 import vn.com.fecredit.complexsample.repository.CasePlainOrderRepository;
+import com.jayway.jsonpath.JsonPath;
 import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
 import vn.com.fecredit.flowable.exposer.util.ModelValidatorRenderer;
 
@@ -114,7 +115,19 @@ public class OrderController {
                 .map(p -> {
                     Map<String, Object> out = new HashMap<>();
                     out.put("caseInstanceId", p.getCaseInstanceId());
-                    out.put("orderTotal", p.getOrderTotal());
+                    // fallback: if orderTotal wasn't populated in the column, try JSON
+                    Double total = p.getOrderTotal();
+                    if (total == null && p.getPlainPayload() != null) {
+                        try {
+                            Object t = JsonPath.read(p.getPlainPayload(), "$.order_total");
+                            if (t instanceof Number) {
+                                total = ((Number) t).doubleValue();
+                            }
+                        } catch (Exception e) {
+                            // ignore
+                        }
+                    }
+                    out.put("orderTotal", total);
                     out.put("orderPriority", p.getOrderPriority());
                     out.put("approvalStatus", p.getApprovalStatus());
                     return ResponseEntity.ok(out);
