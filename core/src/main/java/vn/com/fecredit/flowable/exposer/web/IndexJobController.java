@@ -1,9 +1,9 @@
 package vn.com.fecredit.flowable.exposer.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.InputFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.networknt.schema.InputFormat;
 import vn.com.fecredit.flowable.exposer.entity.SysExposeIndexJob;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeIndexJobRepository;
 import vn.com.fecredit.flowable.exposer.service.MetadataDdlGenerator;

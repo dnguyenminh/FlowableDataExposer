@@ -1,28 +1,19 @@
 package vn.com.fecredit.flowable.exposer.job;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.context.annotation.Profile;
 import vn.com.fecredit.flowable.exposer.entity.SysExposeRequest;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeRequestRepository;
-
-import org.springframework.jdbc.core.JdbcTemplate;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
 
-// Note: CaseDataWorkerService contains the heavy lifting previously in this class
-import vn.com.fecredit.flowable.exposer.job.CaseDataWorkerService;
-
-import java.time.OffsetDateTime;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Background worker responsible for consuming {@code SysExposeRequest}s

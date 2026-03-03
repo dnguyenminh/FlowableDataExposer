@@ -1,8 +1,8 @@
 package vn.com.fecredit.flowable.exposer.entity;
 
-import jakarta.persistence.*;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.*;
 
 import java.time.OffsetDateTime;
 

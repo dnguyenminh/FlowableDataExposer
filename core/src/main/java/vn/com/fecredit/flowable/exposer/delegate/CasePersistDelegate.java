@@ -3,12 +3,11 @@ package vn.com.fecredit.flowable.exposer.delegate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
 import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 import vn.com.fecredit.flowable.exposer.service.RequestPersistService;

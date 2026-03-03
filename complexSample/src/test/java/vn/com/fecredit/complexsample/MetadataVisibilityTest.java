@@ -3,9 +3,6 @@ package vn.com.fecredit.complexsample;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-// import vn.com.fecredit.complexsample.service.MetadataResolver;
-// import vn.com.fecredit.complexsample.service.metadata.MetadataDefinition;
-
 import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 

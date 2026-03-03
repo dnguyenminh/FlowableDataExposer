@@ -1,11 +1,11 @@
 package vn.com.fecredit.flowable.exposer.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 

@@ -1,12 +1,13 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import org.junit.jupiter.api.Test;
+import vn.com.fecredit.flowable.exposer.util.ModelRenderHelpers;
+
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.io.IOException;
 
-import static org.junit.jupiter.api.Assertions.*;
-import vn.com.fecredit.flowable.exposer.util.ModelRenderHelpers;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ModelRenderHelpersTest {
 

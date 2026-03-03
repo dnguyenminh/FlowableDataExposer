@@ -10,7 +10,6 @@
 -->
 <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
             targetNamespace="http://flowable.org/cmmn"
-            xmlns:flowable="http://flowable.org/cmmn"
             elementFormDefault="qualified"
             attributeFormDefault="unqualified">
 

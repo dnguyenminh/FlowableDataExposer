@@ -8,11 +8,11 @@ import vn.com.fecredit.flowable.exposer.entity.SysExposeIndexJob;
 import vn.com.fecredit.flowable.exposer.repository.SysExposeIndexJobRepository;
 import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
-import java.util.Optional;
 
 
 public class IndexJobControllerTest {

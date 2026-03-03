@@ -7,7 +7,7 @@ import vn.com.fecredit.flowable.exposer.repository.SysExposeClassDefRepository;
 import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
 import vn.com.fecredit.flowable.exposer.service.MetadataResourceLoader;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class MetadataDbIntegrationTest {
 

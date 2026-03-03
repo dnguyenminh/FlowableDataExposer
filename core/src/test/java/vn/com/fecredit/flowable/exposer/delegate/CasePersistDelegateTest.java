@@ -10,17 +10,15 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
-import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 import vn.com.fecredit.flowable.exposer.service.CaseDataPersistService;
+import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CasePersistDelegateTest {

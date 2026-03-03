@@ -1,14 +1,15 @@
 package vn.com.fecredit.flowable.exposer.service;
 
 import org.junit.jupiter.api.Test;
+import vn.com.fecredit.flowable.exposer.util.ModelDmnRenderer;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
-import vn.com.fecredit.flowable.exposer.util.ModelDmnRenderer;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ModelDmnRendererTest {
 

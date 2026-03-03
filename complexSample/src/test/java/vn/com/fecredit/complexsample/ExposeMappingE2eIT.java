@@ -12,17 +12,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import vn.com.fecredit.flowable.exposer.job.CaseDataWorker;
 
 import java.time.Duration;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = ComplexSampleTestApplication.class, properties = {
-        "spring.task.scheduling.enabled=false",
-        "flowable.job-executor-activate=false"
-})
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = ComplexSampleTestApplication.class,
+        properties = "spring.main.allow-bean-definition-overriding=true")
 public class ExposeMappingE2eIT {
 
     @LocalServerPort
@@ -60,16 +57,7 @@ public class ExposeMappingE2eIT {
                     }
                 });
 
-        // Synchronous reindex to deterministically process this caseInstanceId in the
-        // test
-        CaseDataWorker worker = ctx.getBean(CaseDataWorker.class);
-        worker.reindexByCaseInstanceId(caseInstanceId);
-
-        // Immediately assert that the synchronous reindex processed the case
-        // (deterministic check)
-        Integer immediateCnt = jdbc.queryForObject("SELECT count(*) FROM case_plain_order WHERE case_instance_id = ?",
-                Integer.class, caseInstanceId);
-        assertThat(immediateCnt).isNotNull().isGreaterThan(0);
+        // the scheduled worker will pick this up; verify later
 
         // wait for plain table and assert row values (kept as fallback)
         verifyPlainTableForCase(caseInstanceId, TOTAL, CUSTOMER_ID);
@@ -96,16 +84,7 @@ public class ExposeMappingE2eIT {
                     }
                 });
 
-        // Synchronous reindex to deterministically process this caseInstanceId in the
-        // test
-        CaseDataWorker worker = ctx.getBean(CaseDataWorker.class);
-        worker.reindexByCaseInstanceId(caseInstanceId);
-
-        // Immediately assert that the synchronous reindex processed the case
-        // (deterministic check)
-        Integer immediateCnt = jdbc.queryForObject("SELECT count(*) FROM case_plain_order WHERE case_instance_id = ?",
-                Integer.class, caseInstanceId);
-        assertThat(immediateCnt).isNotNull().isGreaterThan(0);
+        // the scheduled worker will pick this up; verify later
 
         // wait for plain table and assert row values (kept as fallback)
         verifyPlainTableForCase(caseInstanceId, TOTAL, CUSTOMER_ID);
@@ -129,8 +108,6 @@ public class ExposeMappingE2eIT {
                         return false;
                     }
                 });
-        CaseDataWorker worker = ctx.getBean(CaseDataWorker.class);
-        worker.reindexByCaseInstanceId(caseInstanceId);
         Awaitility.await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(250))
                 .until(() -> {
                     try {

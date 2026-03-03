@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
-             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:flowable="http://flowable.org/dmn"
-             xmlns:design="http://flowable.org/design" id="definition_orderDiscountRules" name="Order Discount Rules"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             id="definition_orderDiscountRules" name="Order Discount Rules"
              namespace="http://www.flowable.org/dmn">
     <decision id="orderDiscountRules" name="Order Discount Rules">
         <decisionTable id="decisionTable_orderDiscountRules" hitPolicy="FIRST">

@@ -3,16 +3,12 @@ package vn.com.fecredit.flowable.exposer.job;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
 import org.springframework.jdbc.core.JdbcTemplate;
-import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
-import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
 import vn.com.fecredit.flowable.exposer.service.IndexLoader;
+import vn.com.fecredit.flowable.exposer.service.MetadataAnnotator;
+import vn.com.fecredit.flowable.exposer.service.MetadataResolver;
 import vn.com.fecredit.flowable.exposer.service.metadata.MetadataDefinition;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Helper component extracted from {@link CaseDataWorker} to keep the worker class small.

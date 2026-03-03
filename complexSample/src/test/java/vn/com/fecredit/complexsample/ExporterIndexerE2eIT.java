@@ -18,10 +18,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = ComplexSampleTestApplication.class, properties = {
-        "spring.task.scheduling.enabled=false",
-        "flowable.job-executor-activate=false"
-})
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = ComplexSampleTestApplication.class,
+        properties = "spring.main.allow-bean-definition-overriding=true")
 public class ExporterIndexerE2eIT {
 
     @LocalServerPort
@@ -48,10 +46,8 @@ public class ExporterIndexerE2eIT {
                     }
                 });
 
-        // Trigger reindex endpoint (production-like)
-        try { rest.postForEntity("http://localhost:" + port + "/api/orders/" + caseInstanceId + "/reindex", null, Void.class); } catch (Exception ignored) {}
 
-        // Debug: dump index tables immediately after triggering reindex to assist diagnosis
+        // Debug: dump index tables early in case the asynchronous job has already injected rows
         try {
             System.out.println("DEBUG[TEST]: DUMP AFTER TRIGGER - order_index rows:");
             java.util.List<java.util.Map<String, Object>> orderRows = jdbc.queryForList("SELECT * FROM order_index WHERE case_instance_id = ?", caseInstanceId);

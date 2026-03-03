@@ -3,13 +3,8 @@ package vn.com.fecredit.flowable.exposer.job;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-
-import vn.com.fecredit.flowable.exposer.job.CaseDataWorkerDialectHelper;
-import vn.com.fecredit.flowable.exposer.job.CaseDataWorkerColumnHelper;
 
 /**
  * Schema maintenance utilities used by the worker service.  Kept small and
